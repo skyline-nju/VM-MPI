@@ -1,34 +1,46 @@
 #ifndef DOMAIN_H
 #define DOMAIN_H
-#include "rand.h"
-#include "cell.h"
 #include <vector>
 #include <stack>
+#include "mpi.h"
+#include "rand.h"
+#include "cell.h"
 
 class SubDomain
 {
 public:
-  SubDomain(double _Lx, double _Ly, int tot_domain, int idx,
-            unsigned long long seed);
-  void update_velocity_inner();
-  void update_velocity_edge();
-  void update_position_inner(double eta);
-  void update_position_edge(double eta);
-  int get_pNum(int row);
-  void pack(int row, std::vector<ParticleData> &buff);
-  void unpack(const std::vector<ParticleData> &buff, int row);
+  SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
+            int rank, unsigned long long seed);
+  void create_particle_random(int nPar);
+  void update_velocity_by_row(int row);
+  void update_velocity_inner_rows();
+  void update_position_inner_rows(double eta);
+  void update_position_edge_row(double eta, int row);
+  void update_cell_list();
+  void create_cell_list();
+  void remove_ghost_particle(int row);
+  int get_particle_num(int row);
+  int count_valid_particle();
+  void pack(int row, double *buff, int &buff_size);
+  void unpack(int row, const double *buff, int buff_size);
+  void update_velocity_MPI();
+  void update_position_MPI(double eta);
+  void one_step_MPI(double eta, int t);
 private:
   double Lx;
   double Ly;
-  double Ly_l;
-  double Ly_h;
+  double yl;
+  double yh;
   int ncols;
   int nrows;
+  int tot_cells;
+  int myrank;
+  int pre_rank;
+  int next_rank;
+  int MAX_BUFF_SIZE;
+  Ran *myran;
   Cell *cell;
   std::vector <Node> particle;
   std::stack <unsigned int> empty_pos;
-
-  int tot_cells;
-  Ran *myran;
 };
 #endif

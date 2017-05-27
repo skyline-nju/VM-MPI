@@ -15,22 +15,19 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="C:\Users\user\Documents\Visual Studio 2017\Projects\MPItest\MPItest\main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="comn.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="node.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="grid.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="domain.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="cell.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -42,9 +39,6 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="node.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="grid.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="cell.h">
