@@ -16,10 +16,8 @@ public:
   void update_velocity_inner_rows();
   void update_position_inner_rows(double eta);
   void update_position_edge_row(double eta, int row);
-  void update_cell_list();
   void create_cell_list();
   void remove_ghost_particle(int row);
-  int get_particle_num(int row);
   int count_valid_particle();
   void pack(int row, double *buff, int &buff_size);
   void unpack(int row, const double *buff, int buff_size);
@@ -33,7 +31,7 @@ private:
   double yh;
   int ncols;
   int nrows;
-  int tot_cells;
+  int tot_rank;
   int myrank;
   int pre_rank;
   int next_rank;

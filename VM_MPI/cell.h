@@ -13,10 +13,6 @@ public:
   void interact();
   void interact(Cell *c2);
   void interact(Cell *c2, double a, double b);
-  void move(Ran *myran, double eta, Cell *cell, double Lx, double Ly,
-            double Ly_l, double Ly_h);
-  void move(Ran *myran, double eta, double Lx, double Ly,
-            double yl, double yh, std::vector<Node *> &ghost_par);
   void push_front(Node *node);
   Node* head;
   int size;

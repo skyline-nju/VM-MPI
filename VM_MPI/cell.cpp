@@ -73,18 +73,3 @@ void Cell::interact(Cell *c2, double a, double b) {
   }
 }
 
-void Cell::move(Ran * myran, double eta, double Lx, double Ly,
-                double yl, double yh, vector<Node*> &ghost_par) {
-  if (head) {
-    Node *curNode = head;
-    do {
-      double noise = eta * 2 * PI * (myran->doub() - 0.5);
-      curNode->update_coor(noise, Lx, yl);
-      if (curNode->y < yl + 1 || curNode->y >= yh - 1) {
-        curNode->is_ghost = true;
-        ghost_par.push_back(curNode);
-      }
-      curNode = curNode->next;
-    } while (curNode);
-  }
-}

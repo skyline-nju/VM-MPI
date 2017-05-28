@@ -12,12 +12,13 @@ SubDomain::SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
   yh = (rank + 1) * dLy + 1;
   ncols = int(Lx);
   nrows = int(dLy) + 2;
-  tot_cells = ncols * nrows;
+  int tot_cells = ncols * nrows;
   cell = new Cell[tot_cells];
   for (int i = 0; i < tot_cells; i++) {
     cell[i].find_neighbor(cell, i, ncols, nrows);
   }
   myran = new Ran(seed + rank);
+  tot_rank = nrows_subdomain;
   myrank = rank;
   pre_rank = rank == 0 ? nrows_subdomain - 1 : rank - 1;
   next_rank = rank == nrows_subdomain - 1 ? 0 : rank + 1;
@@ -29,19 +30,19 @@ SubDomain::SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
 void SubDomain::create_particle_random(int nPar) {
   double Ly0 = yl + 1;
   double Ly1 = yh - 1;
-  particle.reserve(int(nPar * 1.5));
+  particle.reserve(int(nPar * 3));
+  cout << "max particles of rank " << myrank << " is " << particle.capacity() << endl;
   for (int i = 0; i < nPar; i++) {
     particle.push_back(Node());
     particle[i].x = myran->doub() * Lx;
     particle[i].y = myran->doub() * (Ly1 - Ly0) + Ly0;
     double theta = myran->doub() * 2 * PI;
-    particle[i].vx = cos(theta);
-    particle[i].vy = sin(theta);
+    particle[i].vx = particle[i].vx0 = cos(theta);
+    particle[i].vy = particle[i].vy0 = sin(theta);
     particle[i].par_idx = i;
   }
   create_cell_list();
   MAX_BUFF_SIZE = nPar / (nrows - 2) * 10 * 4;
-  //cout << "max buff size = " << MAX_BUFF_SIZE << endl;
 }
 
 void SubDomain::update_velocity_by_row(int row) {
@@ -138,30 +139,25 @@ void SubDomain::update_position_edge_row(double eta, int row) {
          << 1 << " or " << nrows - 2 << endl;
     exit(1);
   }
-  vector<Node*> ghost_par;
-  ghost_par.reserve(MAX_BUFF_SIZE / 8);
+  std::vector<Node *> ghost;
+  ghost.reserve(MAX_BUFF_SIZE / 8);
   for (int i = row * ncols, n = ncols + row * ncols; i < n; i++) {
-    cell[i].move(myran, eta, Lx, Ly, yl, yh, ghost_par);
-  }
-  for (int i = 0, n = ghost_par.size(); i < n; i++) {
-    cell[ghost_par[i]->cell_idx].push_front(ghost_par[i]);
-  }
-}
-
-void SubDomain::update_cell_list() {
-  for (int row = 1; row < nrows - 1; row++) {
-    int j = row * ncols;
-    for (int col = 0; col < ncols; col++) {
-      cell[col + j].head = nullptr;
-      cell[col + j].size = 0;
+    if (cell[i].head) {
+      Node *curNode = cell[i].head;
+      do {
+        double noise = eta * 2 * PI * (myran->doub() - 0.5);
+        curNode->update_coor(noise, Lx, yl);
+        if (curNode->y < yl + 1 || curNode->y >= yh - 1) {
+          curNode->is_ghost = true;
+          ghost.push_back(curNode);
+        }
+        curNode = curNode->next;
+      } while (curNode);
     }
   }
-  for (size_t i = 0, size = particle.size(); i < size; i++) {
-    if (!particle[i].is_empty) {
-      particle[i].is_moved = false;
-      if (!particle[i].is_ghost)
-        cell[particle[i].cell_idx].push_front(&particle[i]);
-    }
+  for (int i = 0, size = ghost.size(); i < size; i++) {
+    int c_idx = ghost[i]->cell_idx;
+    cell[c_idx].push_front(ghost[i]);
   }
 }
 
@@ -192,18 +188,11 @@ void SubDomain::remove_ghost_particle(int row) {
   }
 }
 
-int SubDomain::get_particle_num(int row) {
-  int count = 0;
-  for (int col = 0, j = row * ncols; col < ncols; col++) {
-    count += cell[col + j].size;
-  }
-  return count;
-}
 
 int SubDomain::count_valid_particle() {
   int count = 0;
   for (auto iter = particle.begin(); iter != particle.end(); ++iter) {
-    if (!(*iter).is_ghost)
+    if (!(*iter).is_empty && !(*iter).is_ghost)
       count += 1;
   }
   return count;
@@ -211,6 +200,12 @@ int SubDomain::count_valid_particle() {
 
 void SubDomain::pack(int row, double *buff, int &buff_size) {
   int pos = 0;
+  double dy = 0;
+  if (myrank == 0 && row <= 1) {
+    dy = Ly;
+  } else if (myrank == tot_rank - 1 && row >= nrows - 2) {
+    dy = -Ly;
+  }
   for (int col = 0, j = row * ncols; col < ncols; col++) {
     int i = col + j;
     if (cell[i].head) {
@@ -218,15 +213,12 @@ void SubDomain::pack(int row, double *buff, int &buff_size) {
       do {
         if (!curNode->new_arrival) {
           buff[pos++] = curNode->x;
-          if (curNode->y < 0) {
-            buff[pos++] = curNode->y + Ly;
-          } else if (curNode->y >= Ly) {
-            buff[pos++] = curNode->y - Ly;
-          } else {
-            buff[pos++] = curNode->y;
-          }
+          buff[pos++] = curNode->y + dy;
           buff[pos++] = curNode->vx;
           buff[pos++] = curNode->vy;
+          if (curNode->y < -1 || curNode->y >= Ly + 1) {
+            cout << "rank = " << myrank << "\ty = " << curNode->y << endl;
+          }
         } else {
           curNode->new_arrival = false;
         }
@@ -248,12 +240,21 @@ void SubDomain::unpack(int row, const double *buff, int buff_size) {
     ghost = true;
   } else if (row == 1 || row == nrows -2) {
     ghost = false;
+  } else {
+    cout << "Error, wrong row to uppack\n";
+    exit(1);
   }
   int nPar = buff_size / 4;
   for (unsigned int i = 0; i < nPar; i++) {
-    int cell_idx = int(buff[i * 4]) + j;
-    if (cell_idx / ncols != row) {
-      cout << "index of cell = " << cell_idx << "\trow = " << row << endl;
+    double x = buff[i * 4];
+    double y = buff[i * 4 + 1];
+    double vx = buff[i * 4 + 2];
+    double vy = buff[i * 4 + 3];
+    int cell_idx = int(x) + j;
+    if (int(y - yl) != row) {
+      cout << "Error, rank = " << myrank << "\ty = " << y << "\tint(y - yl) = "
+        << int(y - yl) << "\trow = " << row << endl;
+      exit(1);
     }
     int par_idx;
     if (!empty_pos.empty()) {
@@ -263,12 +264,13 @@ void SubDomain::unpack(int row, const double *buff, int buff_size) {
       par_idx = particle.size();
       particle.push_back(Node());
     }
-    particle[par_idx].x = buff[i * 4];
-    particle[par_idx].y = buff[i * 4 + 1];
-    particle[par_idx].vx = buff[i * 4 + 2];
-    particle[par_idx].vy = buff[i * 4 + 3];
+    particle[par_idx].x = x;
+    particle[par_idx].y = y;
+    particle[par_idx].vx = particle[par_idx].vx0 = vx;
+    particle[par_idx].vy = particle[par_idx].vy0 = vy;
     particle[par_idx].cell_idx = cell_idx;
     particle[par_idx].par_idx = par_idx;
+    particle[par_idx].is_moved = false;
     particle[par_idx].is_empty = false;
     particle[par_idx].is_ghost = ghost;
     particle[par_idx].new_arrival = true;
@@ -339,9 +341,9 @@ void SubDomain::update_position_MPI(double eta) {
   int tag_backward = 2;
 
   /* update position at row = nrows-2 and transfer data forward */
+  update_position_edge_row(eta, nrows - 2);
   double *buff_to_next = new double[MAX_BUFF_SIZE];
   double *buff_from_pre = new double[MAX_BUFF_SIZE];
-  update_position_edge_row(eta, nrows - 2);
   int size_to_next;
   pack(nrows - 1, buff_to_next, size_to_next);
   MPI_Irecv(buff_from_pre, MAX_BUFF_SIZE, MPI_DOUBLE, pre_rank,
@@ -350,9 +352,9 @@ void SubDomain::update_position_MPI(double eta) {
             tag_forward, MPI_COMM_WORLD, &reqs[1]);
 
   /* update positon at row = 1 and transfer data backward */
+  update_position_edge_row(eta, 1);
   double *buff_to_pre = new double[MAX_BUFF_SIZE];
   double *buff_from_next = new double[MAX_BUFF_SIZE];
-  update_position_edge_row(eta, 1);
   int size_to_pre;
   pack(0, buff_to_pre, size_to_pre);
   MPI_Irecv(buff_from_next, MAX_BUFF_SIZE, MPI_DOUBLE, next_rank,
@@ -389,7 +391,11 @@ void SubDomain::update_position_MPI(double eta) {
 void SubDomain::one_step_MPI(double eta, int t) {
   update_velocity_MPI();
   update_position_MPI(eta);
-  cout << "rank" << myrank << "\tN = " << count_valid_particle()
-       << "\tt = " << t << endl;
+  //remove_ghost_particle(0);
+  //remove_ghost_particle(nrows - 1);
+  if (t % 100 == 0) {
+  int n2 = count_valid_particle();
+  cout << "rank" << myrank << "\tN = " << n2 << "\tt = " << t << endl;
+  }
 }
 

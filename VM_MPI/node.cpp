@@ -3,26 +3,6 @@
 using namespace std;
 double Node::v0 = 0.5;
 
-//Node::Node() {
-//  x = y = vx = vy = 0;
-//  vx0 = vy0 = 0;
-//  cell_idx = par_idx = 0;
-//  next = nullptr;
-//  moved = false;
-//  valid = true;
-//  new_arrival = false;
-//}
-//
-//Node::Node(const ParticleData &pdata0) {
-//  pdata = pdata0;
-//  vx0 = vy0 = 0;
-//  cell_idx = par_idx = 0;
-//  next = nullptr;
-//  moved = false;
-//  valid = true;
-//  new_arrival = true;
-//}
-
 void Node::align(Node *node) {
   if (rr(node) < 1)
     addV(node);
@@ -48,7 +28,8 @@ void Node::update_coor(double noise, double Lx, double yl) {
     x += Lx;
   }
   y += v0*vy;
-  cal_cell_idx(yl, int(Lx));
   is_moved = true;
+  new_arrival = false;
+  cal_cell_idx(yl, int(Lx));
 }
 

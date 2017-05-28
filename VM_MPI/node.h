@@ -21,7 +21,7 @@ struct Node
   void addV(Node *node);
   void align(Node *node);
   void align(Node *node, double a, double b);
-  void cal_cell_idx(double y_l, int ncols);
+  void cal_cell_idx(double yl, int ncols);
   void update_coor(double noise, double Lx, double yl);
 
   double x;
