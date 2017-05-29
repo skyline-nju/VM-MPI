@@ -2,10 +2,10 @@
 using namespace std;
 
 Cell::Cell() {
-  head = nullptr;
+  head = NULL;
   size = 0;
   for (int i = 0; i < 4; i++) {
-    neighbor[i] = nullptr;
+    neighbor[i] = NULL;
   }
 }
 

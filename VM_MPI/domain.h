@@ -18,7 +18,8 @@ public:
   void update_position_edge_row(double eta, int row);
   void create_cell_list();
   void remove_ghost_particle(int row);
-  int count_valid_particle();
+  int count_valid_particle() const;
+  void sum_velocity(double &svx, double &svy, int &npar) const;
   void pack(int row, double *buff, int &buff_size);
   void unpack(int row, const double *buff, int buff_size);
   void comm_start(int source_row, int &dest_row,
@@ -28,7 +29,7 @@ public:
                 MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity_MPI();
   void update_position_MPI(double eta);
-  void one_step_MPI(double eta, int t);
+  void one_step_MPI(double eta, int t, double &sum_phi, int &count);
 private:
   double Lx;
   double Ly;

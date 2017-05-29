@@ -116,7 +116,7 @@ void SubDomain::update_position_inner_rows(double eta) {
   for (int row = 1; row < nrows - 1; row++) {
     int j = row * ncols;
     for (int col = 0; col < ncols; col++) {
-      cell[col + j].head = nullptr;
+      cell[col + j].head = NULL;
       cell[col + j].size = 0;
     }
   }
@@ -136,7 +136,7 @@ void SubDomain::update_position_inner_rows(double eta) {
 void SubDomain::update_position_edge_row(double eta, int row) {
   if (row != 1 && row != nrows - 2) {
     cout << "Error, row = " << row << " should be equal to "
-         << 1 << " or " << nrows - 2 << endl;
+      << 1 << " or " << nrows - 2 << endl;
     exit(1);
   }
   std::vector<Node *> ghost;
@@ -182,20 +182,33 @@ void SubDomain::remove_ghost_particle(int row) {
         empty_pos.push(curNode->par_idx);
         curNode = curNode->next;
       } while (curNode);
-      cell[idx].head = nullptr;
+      cell[idx].head = NULL;
       cell[idx].size = 0;
     }
   }
 }
 
 
-int SubDomain::count_valid_particle() {
+int SubDomain::count_valid_particle() const {
   int count = 0;
-  for (auto iter = particle.begin(); iter != particle.end(); ++iter) {
-    if (!(*iter).is_empty && !(*iter).is_ghost)
+  for (int i = 0, size = particle.size(); i < size; i++) {
+    if (!particle[i].is_empty && !particle[i].is_ghost)
       count += 1;
   }
   return count;
+}
+
+void SubDomain::sum_velocity(double &svx, double &svy, int &npar) const {
+  svx = 0;
+  svy = 0;
+  npar = 0;
+  for (int i = 0, size = particle.size(); i < size; i++) {
+    if (!particle[i].is_empty && !particle[i].is_ghost) {
+      svx += particle[i].vx;
+      svy += particle[i].vy;
+      npar++;
+    }
+  }
 }
 
 void SubDomain::pack(int row, double *buff, int &buff_size) {
@@ -245,7 +258,7 @@ void SubDomain::unpack(int row, const double *buff, int buff_size) {
     exit(1);
   }
   int nPar = buff_size / 4;
-  for (unsigned int i = 0; i < nPar; i++) {
+  for (int i = 0; i < nPar; i++) {
     double x = buff[i * 4];
     double y = buff[i * 4 + 1];
     double vx = buff[i * 4 + 2];
@@ -323,8 +336,10 @@ void SubDomain::update_velocity_MPI() {
   vector<MPI_Request> rreq(2);
   vector<double *> sbuff(2);
   vector<double *> rbuff(2);
-  vector<int> source_row = { nrows - 2, 1 };
   vector<int> dest_row(2);
+  vector<int> source_row;
+  source_row.push_back(nrows - 2);
+  source_row.push_back(1);
 
   for (int i = 0; i < sreq.size(); i++) {
     comm_start(source_row[i], dest_row[i], &sbuff[i], &rbuff[i],
@@ -346,8 +361,10 @@ void SubDomain::update_position_MPI(double eta) {
   vector<MPI_Request> rreq(2);
   vector<double *> sbuff(2);
   vector<double *> rbuff(2);
-  vector<int> src_row = { nrows - 1, 0 };
   vector<int> dest_row(2);
+  vector<int> src_row;
+  src_row.push_back(nrows - 1);
+  src_row.push_back(0);
 
   for (int i = 0; i < sreq.size(); i++) {
     int row = src_row[i] < nrows / 2 ? src_row[i] + 1 : src_row[i] - 1;
@@ -363,12 +380,42 @@ void SubDomain::update_position_MPI(double eta) {
   }
 }
 
-void SubDomain::one_step_MPI(double eta, int t) {
+void SubDomain::one_step_MPI(double eta, int t, double &sum_phi, int &count) {
   update_velocity_MPI();
   update_position_MPI(eta);
   if (t % 100 == 0) {
-  int n2 = count_valid_particle();
-  cout << "rank" << myrank << "\tN = " << n2 << "\tt = " << t << endl;
+    double sv[2];
+    int N;
+    sum_velocity(sv[0], sv[1], N);
+    double tot_v[2];
+    int *num = new int[tot_rank];
+    MPI_Gather(&N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myrank == 0) {
+      int totN = 0;
+      for (int i = 0; i < tot_rank; i++) {
+        totN += num[i];
+      }
+      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / totN;
+      if (t % 1000 == 0) {
+        cout << "t = " << t << "\t";
+        for (int i = 0; i < tot_rank; i++) {
+          if (i == tot_rank - 1)
+            cout << num[i] << " = " << totN;
+          else
+            cout << num[i] << " + ";
+        }
+        cout << "\tphi = " << phi;
+        if (t >= 100000) {
+          count++;
+          sum_phi += phi;
+          cout << "\t" << sum_phi / count << endl;
+        } else {
+          cout << endl;
+        }
+      }
+    }
+    delete[] num;
   }
 }
 
