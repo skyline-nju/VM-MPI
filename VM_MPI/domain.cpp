@@ -278,121 +278,94 @@ void SubDomain::unpack(int row, const double *buff, int buff_size) {
   }
 }
 
+void SubDomain::comm_start(int source_row, int &dest_row,
+                           double **sbuff, double **rbuff,
+                           MPI_Request *sreq, MPI_Request *rreq) {
+  int source, dest, tag = source_row;
+  if (source_row == nrows - 2 || source_row == nrows - 1) {
+    source = pre_rank;
+    dest = next_rank;
+    dest_row = source_row - nrows + 2;
+  } else if (source_row == 0 || source_row == 1) {
+    source = next_rank;
+    dest = pre_rank;
+    dest_row = source_row + nrows - 2;
+  } else {
+    cout << "Wrong row when start communication\n";
+    exit(1);
+  }
+  double *send_buff = new double[MAX_BUFF_SIZE];
+  double *recv_buff = new double[MAX_BUFF_SIZE];
+  int send_buff_size;
+  pack(source_row, send_buff, send_buff_size);
+  MPI_Irecv(
+    recv_buff, MAX_BUFF_SIZE, MPI_DOUBLE, source, tag, MPI_COMM_WORLD, rreq);
+  MPI_Isend(
+    send_buff, send_buff_size, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, sreq);
+  *sbuff = send_buff;
+  *rbuff = recv_buff;
+}
+
+void SubDomain::comm_end(int dest_row, double *sbuff, double *rbuff,
+                         MPI_Request *sreq, MPI_Request *rreq) {
+  MPI_Status stat;
+  MPI_Wait(rreq, &stat);
+  int recv_buff_size;
+  MPI_Get_count(&stat, MPI_DOUBLE, &recv_buff_size);
+  unpack(dest_row, rbuff, recv_buff_size);
+  delete[] rbuff;
+  MPI_Wait(sreq, &stat);
+  delete[] sbuff;
+}
+
 void SubDomain::update_velocity_MPI() {
-  MPI_Request reqs[4];
-  MPI_Status stats[4];
-  int tag_forward = 99;
-  int tag_backward = 1;
+  vector<MPI_Request> sreq(2);
+  vector<MPI_Request> rreq(2);
+  vector<double *> sbuff(2);
+  vector<double *> rbuff(2);
+  vector<int> source_row = { nrows - 2, 1 };
+  vector<int> dest_row(2);
 
-  /* transfer data forward */
-  double *buff_to_next = new double[MAX_BUFF_SIZE];
-  double *buff_from_pre = new double[MAX_BUFF_SIZE];
-  int size_to_next;
-  pack(nrows - 2, buff_to_next, size_to_next);
-  MPI_Irecv(buff_from_pre, MAX_BUFF_SIZE, MPI_DOUBLE, pre_rank,
-            tag_forward, MPI_COMM_WORLD, &reqs[0]);
-  MPI_Isend(buff_to_next, size_to_next, MPI_DOUBLE, next_rank,
-            tag_forward, MPI_COMM_WORLD, &reqs[1]);
+  for (int i = 0; i < sreq.size(); i++) {
+    comm_start(source_row[i], dest_row[i], &sbuff[i], &rbuff[i],
+               &sreq[i], &rreq[i]);
+  }
 
-  /* transfer data backward */
-  double *buff_to_pre = new double[MAX_BUFF_SIZE];
-  double *buff_from_next = new double[MAX_BUFF_SIZE];
-  int size_to_pre;
-  pack(1, buff_to_pre, size_to_pre);
-  MPI_Irecv(buff_from_next, MAX_BUFF_SIZE, MPI_DOUBLE, next_rank,
-            tag_backward, MPI_COMM_WORLD, &reqs[2]);
-  MPI_Isend(buff_to_pre, size_to_pre, MPI_DOUBLE, pre_rank,
-            tag_backward, MPI_COMM_WORLD, &reqs[3]);
-
-  /* update velocity of particles located in inner rows */
   update_velocity_inner_rows();
 
-  /* unpack data to row = 0 and update velocity */
-  MPI_Wait(&reqs[0], &stats[0]);
-  int size_from_pre;
-  MPI_Get_count(&stats[0], MPI_DOUBLE, &size_from_pre);
-  unpack(0, buff_from_pre, size_from_pre);
-  update_velocity_by_row(0);
-  remove_ghost_particle(0);
-
-  /* unpack data to row = nrows-1 and update velocity */
-  MPI_Wait(&reqs[2], &stats[2]);
-  int size_from_next;
-  MPI_Get_count(&stats[2], MPI_DOUBLE, &size_from_next);
-  unpack(nrows - 1, buff_from_next, size_from_next);
-  update_velocity_by_row(nrows - 2);
-  remove_ghost_particle(nrows - 1);
-
-  /* wait until finishing sending */
-  MPI_Wait(&reqs[1], &stats[1]);
-  MPI_Wait(&reqs[3], &stats[3]);
-
-  /* free memory */
-  delete[] buff_from_next;
-  delete[] buff_from_pre;
-  delete[] buff_to_next;
-  delete[] buff_to_pre;
+  for (int i = 0; i < sreq.size(); i++) {
+    comm_end(dest_row[i], sbuff[i], rbuff[i], &sreq[i], &rreq[i]);
+    int row = dest_row[i] < nrows / 2 ? dest_row[i] : dest_row[i] - 1;
+    update_velocity_by_row(row);
+    remove_ghost_particle(dest_row[i]);
+  }
 }
 
 void SubDomain::update_position_MPI(double eta) {
-  MPI_Request reqs[4];
-  MPI_Status stats[4];
-  int tag_forward = 88;
-  int tag_backward = 2;
+  vector<MPI_Request> sreq(2);
+  vector<MPI_Request> rreq(2);
+  vector<double *> sbuff(2);
+  vector<double *> rbuff(2);
+  vector<int> src_row = { nrows - 1, 0 };
+  vector<int> dest_row(2);
 
-  /* update position at row = nrows-2 and transfer data forward */
-  update_position_edge_row(eta, nrows - 2);
-  double *buff_to_next = new double[MAX_BUFF_SIZE];
-  double *buff_from_pre = new double[MAX_BUFF_SIZE];
-  int size_to_next;
-  pack(nrows - 1, buff_to_next, size_to_next);
-  MPI_Irecv(buff_from_pre, MAX_BUFF_SIZE, MPI_DOUBLE, pre_rank,
-            tag_forward, MPI_COMM_WORLD, &reqs[0]);
-  MPI_Isend(buff_to_next, size_to_next, MPI_DOUBLE, next_rank,
-            tag_forward, MPI_COMM_WORLD, &reqs[1]);
+  for (int i = 0; i < sreq.size(); i++) {
+    int row = src_row[i] < nrows / 2 ? src_row[i] + 1 : src_row[i] - 1;
+    update_position_edge_row(eta, row);
+    comm_start(src_row[i], dest_row[i], &sbuff[i], &rbuff[i],
+               &sreq[i], &rreq[i]);
+  }
 
-  /* update positon at row = 1 and transfer data backward */
-  update_position_edge_row(eta, 1);
-  double *buff_to_pre = new double[MAX_BUFF_SIZE];
-  double *buff_from_next = new double[MAX_BUFF_SIZE];
-  int size_to_pre;
-  pack(0, buff_to_pre, size_to_pre);
-  MPI_Irecv(buff_from_next, MAX_BUFF_SIZE, MPI_DOUBLE, next_rank,
-            tag_backward, MPI_COMM_WORLD, &reqs[2]);
-  MPI_Isend(buff_to_pre, size_to_pre, MPI_DOUBLE, pre_rank,
-            tag_backward, MPI_COMM_WORLD, &reqs[3]);
-
-  /* update position of particles located in inner rows */
   update_position_inner_rows(eta);
 
-  /* unpack data to row = 1*/
-  MPI_Wait(&reqs[0], &stats[0]);
-  int size_from_pre;
-  MPI_Get_count(&stats[0], MPI_DOUBLE, &size_from_pre);
-  unpack(1, buff_from_pre, size_from_pre);
-
-  /* unpack data to row = nrows-2 */
-  MPI_Wait(&reqs[2], &stats[2]);
-  int size_from_next;
-  MPI_Get_count(&stats[2], MPI_DOUBLE, &size_from_next);
-  unpack(nrows - 2, buff_from_next, size_from_next);
-
-  /* wait until finishing sending */
-  MPI_Wait(&reqs[1], &stats[1]);
-  MPI_Wait(&reqs[3], &stats[3]);
-
-  /* free memory */
-  delete[] buff_from_next;
-  delete[] buff_from_pre;
-  delete[] buff_to_next;
-  delete[] buff_to_pre;
+  for (int i = 0; i < sreq.size(); i++) {
+    comm_end(dest_row[i], sbuff[i], rbuff[i], &sreq[i], &rreq[i]);
+  }
 }
 
 void SubDomain::one_step_MPI(double eta, int t) {
   update_velocity_MPI();
   update_position_MPI(eta);
-  //remove_ghost_particle(0);
-  //remove_ghost_particle(nrows - 1);
   if (t % 100 == 0) {
   int n2 = count_valid_particle();
   cout << "rank" << myrank << "\tN = " << n2 << "\tt = " << t << endl;

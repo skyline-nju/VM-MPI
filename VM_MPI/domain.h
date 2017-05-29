@@ -21,6 +21,11 @@ public:
   int count_valid_particle();
   void pack(int row, double *buff, int &buff_size);
   void unpack(int row, const double *buff, int buff_size);
+  void comm_start(int source_row, int &dest_row,
+                  double **sbuff, double **rbuff,
+                  MPI_Request *sreq, MPI_Request *rreq);
+  void comm_end(int dest_row, double *sbuff, double *rbuff,
+                MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity_MPI();
   void update_position_MPI(double eta);
   void one_step_MPI(double eta, int t);

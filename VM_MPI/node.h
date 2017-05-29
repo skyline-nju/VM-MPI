@@ -3,19 +3,8 @@
 #include "rand.h"
 #include "comn.h"
 
-
-struct ParticleData
-{
-  double x;
-  double y;
-  double vx;
-  double vy;
-};
-
 struct Node
 {
-  //Node();
-  //Node(const ParticleData &pdata0);
   double rr(Node *node);
   double rr(Node *node, double a, double b);
   void addV(Node *node);
