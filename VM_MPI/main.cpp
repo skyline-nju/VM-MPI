@@ -8,7 +8,7 @@ using namespace std;
 int main(int argc, char *argv[]) {
   double Lx = 180;
   double Ly = atof(argv[1]);
-  //double Ly = 1000;
+  //double Ly = 600;
   double eta = 0.35;
   double rho0 = 1;
 
@@ -25,11 +25,15 @@ int main(int argc, char *argv[]) {
   SubDomain subdomain(Lx, Ly, size, rank, 123, eta, 0, rho0);
   subdomain.create_from_snap("s_0.35_0_1_180_100_123_01000000.bin");
   //subdomain.create_particle_random(int(rho0 * Lx * Ly / size));
-  for (int i = 0; i < 100000; i++) {
+  for (int i = 0; i < 1000; i++) {
     subdomain.one_step_MPI(eta, i);
+    if (i % 1000 == 0) {
+      cout << "t = " << i << endl;
+    }
   }
   if (rank == 0) {
     cout << "elapsed time = " << MPI_Wtime() - t_beg << endl;
   }
   MPI_Finalize();
+  return 0;
 }

@@ -19,6 +19,10 @@
 
 const double PI = 3.14159265358979;
 
+// check whether file or folder exists
+
+bool exist(const char *filename);
+
 // create folder
 void mkdir(const char *folder);
 

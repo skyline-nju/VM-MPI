@@ -11,6 +11,7 @@ class SubDomain
 public:
   SubDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
             unsigned long long seed, double eta, double eps, double rho0);
+  ~SubDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string filename);
   void update_velocity_by_row(int row);

@@ -34,6 +34,11 @@ SubDomain::SubDomain(double Lx_domain, double Ly_domain, int ntask,
   }
 }
 
+SubDomain::~SubDomain() {
+  delete[] cell;
+  fout_phi.close();
+}
+
 void SubDomain::create_particle_random(int nPar) {
   double Ly0 = yl + 1;
   double Ly1 = yh - 1;
@@ -53,6 +58,10 @@ void SubDomain::create_particle_random(int nPar) {
 
 void SubDomain::create_from_snap(const string filename) {
   MPI_File fin;
+  if (!exist(filename.c_str())) {
+    cout << "Error, " << filename << " doesn't exist!\n";
+    exit(1);
+  }
   MPI_File_open(
     MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fin);
   MPI_Offset size;

@@ -2,19 +2,23 @@
 
 using namespace std;
 
-void mkdir(const char *folder) {
+bool exist(const char *filename) {
 #ifdef _MSC_VER
-  if (_access(folder, 0) != 0)
+  return !(_access(filename, 0));
 #else
-  if (access(folder, 0) != 0)
+  return !(access(filename, 0));
 #endif
-  {
+}
+
+void mkdir(const char *folder) {
+  if (!exist(folder)) {
     char command[100];
     snprintf(command, 100, "mkdir %s", folder);
     if (system(command))
       cout << "create folder: " << folder << " successfully" << endl;
-  } else
+  } else {
     cout << "folder: " << folder << " already exists" << endl;
+  }
 }
 
 vector<string> split(const string &str, const string &delim) {
