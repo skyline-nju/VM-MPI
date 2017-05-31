@@ -6,24 +6,14 @@
 #include "rand.h"
 #include "cell.h"
 
-class SubDomain
+class StaticDomain
 {
 public:
-  SubDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
-            unsigned long long seed, double eta, double eps, double rho0);
-  ~SubDomain();
+  StaticDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
+               unsigned long long seed, double eta, double eps, double rho0);
+  ~StaticDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string filename);
-  void update_velocity_by_row(int row);
-  void update_velocity_inner_rows();
-  void update_position_inner_rows(double eta);
-  void update_position_edge_row(double eta, int row);
-  void create_cell_list();
-  void remove_ghost_particle(int row);
-  int count_valid_particle() const;
-  void sum_velocity(double &svx, double &svy, int &npar) const;
-  void pack(int row, double *buff, int &buff_size);
-  void unpack(int row, const double *buff, int buff_size);
   void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
                   MPI_Request *sreq, MPI_Request *rreq);
   void comm_end(int dest_row, double *sbuff, double *rbuff,
@@ -37,17 +27,73 @@ private:
   double Ly;
   double yl;
   double yh;
-  int ncols;
-  int nrows;
+
   int tot_rank;
   int myrank;
   int pre_rank;
   int next_rank;
+
+  int ncols;
+  int nrows;
+  Cell *cell;
+
+  Node *particle;
+  int MAX_PAR;
+  int end_pos;
+  std::stack <Node *> empty_pos;
+
   int MAX_BUFF_SIZE;
   Ran *myran;
+
+  std::ofstream fout_phi;
+};
+
+class DynamicDomain
+{
+public:
+  DynamicDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
+                unsigned long long seed, double eta, double eps, double rho0);
+  ~DynamicDomain();
+  void create_particle_random(int nPar);
+  void create_from_snap(const std::string filename);
+  void rearrange();
+  //void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
+  //  MPI_Request *sreq, MPI_Request *rreq);
+  //void comm_end(int dest_row, double *sbuff, double *rbuff,
+  //  MPI_Request *sreq, MPI_Request *rreq);
+  void update_velocity();
+  //void update_position_MPI(double eta);
+  //void one_step_MPI(double eta, int t);
+  //void output(int t);
+private:
+  int tot_rank;
+  int myrank;
+  int pre_rank;
+  int next_rank;
+
+  double Lx;
+  double Ly;
+  double yl;
+  double yh;
+
   Cell *cell;
-  std::vector <Node> particle;
-  std::stack <unsigned int> empty_pos;
+  int MAX_CELL;      /* Max number of cell */
+  int ncols;
+  int nrows;
+  int first_row;
+  int max_row;
+  int delta_row_pre;
+  int delta_row_next;
+
+  Node *particle;
+  int MAX_PAR;       /* Max number of particles */
+  int end_pos;       /* Last index */
+  int nPar_per_row;
+  std::stack <Node *> empty_pos;
+
+  int MAX_BUFF_SIZE;
+
+  Ran *myran;
   std::ofstream fout_phi;
 };
 #endif

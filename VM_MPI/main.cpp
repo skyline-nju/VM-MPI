@@ -18,13 +18,13 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   double t_beg;
+
+  StaticDomain subdomain(Lx, Ly, size, rank, 123, eta, 0, rho0);
+  subdomain.create_from_snap("s_0.35_0_1_180_100_123_01000000.bin");
+  //subdomain.create_particle_random(int(rho0 * Lx * Ly / size));
   if (rank == 0) {
     t_beg = MPI_Wtime();
   }
-
-  SubDomain subdomain(Lx, Ly, size, rank, 123, eta, 0, rho0);
-  subdomain.create_from_snap("s_0.35_0_1_180_100_123_01000000.bin");
-  //subdomain.create_particle_random(int(rho0 * Lx * Ly / size));
   for (int i = 0; i < 1000; i++) {
     subdomain.one_step_MPI(eta, i);
     if (i % 1000 == 0) {

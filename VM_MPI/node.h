@@ -10,8 +10,13 @@ struct Node
   void addV(Node *node);
   void align(Node *node);
   void align(Node *node, double a, double b);
-  void cal_cell_idx(double yl, int ncols);
+  int cell_idx(double yl, int ncols);
   void update_coor(double noise, double Lx, double yl);
+  static void ini_random(Node *par, int nPar, Ran *myran,
+                         double Lx, double yl, double yh);
+  static void ini_from_snap(Node **par, int &npar, int &max_par_num,
+                            const std::string filename, double Lx, double Ly,
+                            int tot_rank, int myrank);
 
   double x;
   double y;
@@ -19,8 +24,6 @@ struct Node
   double vy;
   double vx0;
   double vy0;
-  int cell_idx;
-  int par_idx;
   Node* next;
   bool is_moved;
   bool is_empty;
@@ -49,9 +52,7 @@ inline double Node::rr(Node *node, double a, double b) {
   return dx*dx + dy*dy;
 }
 
-inline void Node::cal_cell_idx(double yl, int ncols) {
-  int col = int(x);
-  int row = int(y - yl);
-  cell_idx = col + row * ncols;
+inline int Node::cell_idx(double yl, int ncols) {
+  return int(x) + int(y - yl) * ncols;
 }
 #endif
