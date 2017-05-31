@@ -3,11 +3,11 @@
 #include <cmath>
 using namespace std;
 
-SubDomain::SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
-                     int rank, unsigned long long seed){
+SubDomain::SubDomain(double Lx_domain, double Ly_domain, int ntask,
+                     int rank, unsigned long long seed, double eta, double eps, double rho0){
   Lx = Lx_domain;
   Ly = Ly_domain;
-  double dLy = Ly / nrows_subdomain;
+  double dLy = Ly / ntask;
   yl = rank * dLy - 1;
   yh = (rank + 1) * dLy + 1;
   ncols = int(Lx);
@@ -18,20 +18,26 @@ SubDomain::SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
     cell[i].find_neighbor(cell, i, ncols, nrows);
   }
   myran = new Ran(seed + rank);
-  tot_rank = nrows_subdomain;
+  tot_rank = ntask;
   myrank = rank;
-  pre_rank = rank == 0 ? nrows_subdomain - 1 : rank - 1;
-  next_rank = rank == nrows_subdomain - 1 ? 0 : rank + 1;
+  pre_rank = rank == 0 ? ntask - 1 : rank - 1;
+  next_rank = rank == ntask - 1 ? 0 : rank + 1;
   cout << "subdomain " << rank << "\tpre rank " << pre_rank;
   cout << "\tnext rank " << next_rank << endl;
   cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
+
+  if (myrank == 0) {
+    char fname[100];
+    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
+             eta, eps, rho0, Lx, Ly, seed, tot_rank);
+    fout_phi.open(fname);
+  }
 }
 
 void SubDomain::create_particle_random(int nPar) {
   double Ly0 = yl + 1;
   double Ly1 = yh - 1;
-  particle.reserve(int(nPar * 3));
-  cout << "max particles of rank " << myrank << " is " << particle.capacity() << endl;
+  particle.reserve(nPar * 3);
   for (int i = 0; i < nPar; i++) {
     particle.push_back(Node());
     particle[i].x = myran->doub() * Lx;
@@ -45,62 +51,117 @@ void SubDomain::create_particle_random(int nPar) {
   MAX_BUFF_SIZE = nPar / (nrows - 2) * 10 * 4;
 }
 
+void SubDomain::create_from_snap(const string filename) {
+  MPI_File fin;
+  MPI_File_open(
+    MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fin);
+  MPI_Offset size;
+  MPI_File_get_size(fin, &size);
+  int size_buff = size / 4;
+  float *buff = new float[size_buff];
+  MPI_Status stat;
+  MPI_File_read_at(fin, 0, buff, size_buff, MPI_FLOAT, &stat);
+
+  vector<string> str_list = split(filename, "_");
+  double lx, ly;
+  str_to_num(str_list[4], lx);
+  str_to_num(str_list[5], ly);
+  int nx, ny;
+  if (int(Lx) % int(lx) == 0 && int(Ly) / tot_rank % int(ly) == 0) {
+    nx = int(Lx) / int(lx);
+    ny = int(Ly) / tot_rank / int(ly);
+  } else {
+    cout << "Error, the size of input snapshot is not right" << endl;
+    exit(1);
+  }
+  int npar_in = size_buff / 3;
+  int idx_par = 0;
+  particle.reserve(npar_in * nx * ny * 3);
+  for (int row = 0; row < ny; row++) {
+    double dy = row * ly + Ly / tot_rank * myrank;
+    for (int col = 0; col < nx; col++) {
+      double dx = col * lx;
+      for (int i = 0; i < npar_in; i++) {
+        Node p;
+        p.x = buff[i * 3] + dx;
+        p.y = buff[i * 3 + 1] + dy;
+        p.vx = p.vx0 = cos(buff[i * 3 + 2]);
+        p.vy = p.vy0 = sin(buff[i * 3 + 2]);
+        p.par_idx = idx_par;
+        idx_par++;
+        particle.push_back(p);
+      }
+    }
+  }
+  MPI_File_close(&fin);
+  delete[] buff;
+  create_cell_list();
+  cout << "rank = " << myrank << "\tN = " << particle.size() << endl;
+  MAX_BUFF_SIZE = particle.size() / (nrows - 2) * 10 * 4;
+}
+
 void SubDomain::update_velocity_by_row(int row) {
   if (row > 0) {
     int j = row * ncols;
-    { /* leftmost column */
+    /* leftmost column 0 */
+    {
       int i = j;
       if (cell[i].head) {
         cell[i].interact();
-        cell[i].interact(cell[i].neighbor[0]);
-        cell[i].interact(cell[i].neighbor[1], -Lx, 0);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3]);
+        cell[i].interact(0);
+        cell[i].interact(1, -Lx, 0);
+        cell[i].interact(2);
+        cell[i].interact(3);
       }
     }
-    for (int col = 0; col < ncols - 1; col++) {
+    /* inner colmuns from 1 to ncols - 2 */
+    for (int col = 1; col < ncols - 1; col++) {
       int i = col + j;
       if (cell[i].head) {
         cell[i].interact();
-        cell[i].interact(cell[i].neighbor[0]);
-        cell[i].interact(cell[i].neighbor[1]);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3]);
+        cell[i].interact(0);
+        cell[i].interact(1);
+        cell[i].interact(2);
+        cell[i].interact(3);
       }
     }
-    { /* rightmost row */
+    /* rightmost column ncols - 1 */
+    {
       int i = j + ncols - 1;
       if (cell[i].head) {
         cell[i].interact();
-        cell[i].interact(cell[i].neighbor[0], Lx, 0);
-        cell[i].interact(cell[i].neighbor[1]);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3], Lx, 0);
+        cell[i].interact(0, Lx, 0);
+        cell[i].interact(1);
+        cell[i].interact(2);
+        cell[i].interact(3, Lx, 0);
       }
     }
-  } else {
-    { /* col = 0 */
+  } else if (row == 0){
+    /* leftmost column 0 */
+    {
       int i = 0;
       if (cell[i].head) {
-        cell[i].interact(cell[i].neighbor[1], -Lx, 0);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3]);
+        cell[i].interact(1, -Lx, 0);
+        cell[i].interact(2);
+        cell[i].interact(3);
       }
     }
+    /* inner colmuns from 1 to ncols - 2 */
     for (int col = 1; col < ncols - 1; col++) {
       int i = col;
       if (cell[i].head) {
-        cell[i].interact(cell[i].neighbor[1]);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3]);
+        cell[i].interact(1);
+        cell[i].interact(2);
+        cell[i].interact(3);
       }
     }
-    { /* col = ncols - 1 */
+    /* rightmost column ncols - 1 */
+    {
       int i = ncols - 1;
       if (cell[i].head) {
-        cell[i].interact(cell[i].neighbor[1]);
-        cell[i].interact(cell[i].neighbor[2]);
-        cell[i].interact(cell[i].neighbor[3], Lx, 0);
+        cell[i].interact(1);
+        cell[i].interact(2);
+        cell[i].interact(3, Lx, 0);
       }
     }
   }
@@ -123,7 +184,7 @@ void SubDomain::update_position_inner_rows(double eta) {
   for (size_t i = 0, size = particle.size(); i < size; i++) {
     if (!particle[i].is_empty) {
       if (!particle[i].is_moved) {
-        double noise = eta * 2 * PI * (myran->doub() - 0.5);
+        double noise = eta * 2.0 * PI * (myran->doub() - 0.5);
         particle[i].update_coor(noise, Lx, yl);
       }
       particle[i].is_moved = false;
@@ -229,15 +290,13 @@ void SubDomain::pack(int row, double *buff, int &buff_size) {
           buff[pos++] = curNode->y + dy;
           buff[pos++] = curNode->vx;
           buff[pos++] = curNode->vy;
-          if (curNode->y < -1 || curNode->y >= Ly + 1) {
-            cout << "rank = " << myrank << "\ty = " << curNode->y << endl;
-          }
         } else {
           curNode->new_arrival = false;
         }
         curNode = curNode->next;
         if (pos >= MAX_BUFF_SIZE) {
-          cout << "Error, pos = " << pos << " is larger than MAX_BUFF_SIZE = " << MAX_BUFF_SIZE << endl;
+          cout << "Error, pos = " << pos << " is larger than MAX_BUFF_SIZE = "
+               << MAX_BUFF_SIZE << endl;
           exit(1);
         }
       } while (curNode);
@@ -254,7 +313,7 @@ void SubDomain::unpack(int row, const double *buff, int buff_size) {
   } else if (row == 1 || row == nrows -2) {
     ghost = false;
   } else {
-    cout << "Error, wrong row to uppack\n";
+    cout << "Failed to unpack, row = " << row << endl;
     exit(1);
   }
   int nPar = buff_size / 4;
@@ -304,7 +363,7 @@ void SubDomain::comm_start(int source_row, int &dest_row,
     dest = pre_rank;
     dest_row = source_row + nrows - 2;
   } else {
-    cout << "Wrong row when start communication\n";
+    cout << "Wrong row when starting communication\n";
     exit(1);
   }
   double *send_buff = new double[MAX_BUFF_SIZE];
@@ -380,40 +439,36 @@ void SubDomain::update_position_MPI(double eta) {
   }
 }
 
-void SubDomain::one_step_MPI(double eta, int t, double &sum_phi, int &count) {
+void SubDomain::one_step_MPI(double eta, int t) {
   update_velocity_MPI();
   update_position_MPI(eta);
+  output(t);
+}
+
+void SubDomain::output(int t) {
   if (t % 100 == 0) {
     double sv[2];
-    int N;
-    sum_velocity(sv[0], sv[1], N);
+    int sub_N;
+    sum_velocity(sv[0], sv[1], sub_N);
     double tot_v[2];
     int *num = new int[tot_rank];
-    MPI_Gather(&N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(&sub_N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     if (myrank == 0) {
       int totN = 0;
+      double sum_N2 = 0;
       for (int i = 0; i < tot_rank; i++) {
         totN += num[i];
+        sum_N2 += num[i] * num[i];
       }
+      double mean_N = totN / tot_rank;
       double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / totN;
-      if (t % 1000 == 0) {
-        cout << "t = " << t << "\t";
-        for (int i = 0; i < tot_rank; i++) {
-          if (i == tot_rank - 1)
-            cout << num[i] << " = " << totN;
-          else
-            cout << num[i] << " + ";
-        }
-        cout << "\tphi = " << phi;
-        if (t >= 100000) {
-          count++;
-          sum_phi += phi;
-          cout << "\t" << sum_phi / count << endl;
-        } else {
-          cout << endl;
-        }
+      double theta = atan2(tot_v[1], tot_v[0]);
+      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << totN;
+      for (int i = 0; i < tot_rank; i++) {
+        fout_phi << "\t" << num[i] - totN / tot_rank;
       }
+      fout_phi << endl;
     }
     delete[] num;
   }

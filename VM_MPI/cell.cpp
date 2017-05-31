@@ -43,12 +43,12 @@ void Cell::interact() {
   }
 }
 
-void Cell::interact(Cell *c2) {
-  if (c2->head) {
+void Cell::interact(int neighbor_idx) {
+  if (neighbor[neighbor_idx]->head) {
     Node *node1 = head;
     Node *node2;
     do {
-      node2 = c2->head;
+      node2 = neighbor[neighbor_idx]->head;
       do {
         node1->align(node2);
         node2 = node2->next;
@@ -58,12 +58,12 @@ void Cell::interact(Cell *c2) {
   }
 }
 
-void Cell::interact(Cell *c2, double a, double b) {
-  if (c2->head) {
+void Cell::interact(int neighbor_idx, double a, double b) {
+  if (neighbor[neighbor_idx]->head) {
     Node *node1 = head;
     Node *node2;
     do {
-      node2 = c2->head;
+      node2 = neighbor[neighbor_idx]->head;
       do {
         node1->align(node2, a, b);
         node2 = node2->next;

@@ -9,9 +9,10 @@
 class SubDomain
 {
 public:
-  SubDomain(double Lx_domain, double Ly_domain, int nrows_subdomain,
-            int rank, unsigned long long seed);
+  SubDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
+            unsigned long long seed, double eta, double eps, double rho0);
   void create_particle_random(int nPar);
+  void create_from_snap(const std::string filename);
   void update_velocity_by_row(int row);
   void update_velocity_inner_rows();
   void update_position_inner_rows(double eta);
@@ -22,14 +23,14 @@ public:
   void sum_velocity(double &svx, double &svy, int &npar) const;
   void pack(int row, double *buff, int &buff_size);
   void unpack(int row, const double *buff, int buff_size);
-  void comm_start(int source_row, int &dest_row,
-                  double **sbuff, double **rbuff,
+  void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
                   MPI_Request *sreq, MPI_Request *rreq);
   void comm_end(int dest_row, double *sbuff, double *rbuff,
                 MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity_MPI();
   void update_position_MPI(double eta);
-  void one_step_MPI(double eta, int t, double &sum_phi, int &count);
+  void one_step_MPI(double eta, int t);
+  void output(int t);
 private:
   double Lx;
   double Ly;
@@ -46,5 +47,6 @@ private:
   Cell *cell;
   std::vector <Node> particle;
   std::stack <unsigned int> empty_pos;
+  std::ofstream fout_phi;
 };
 #endif

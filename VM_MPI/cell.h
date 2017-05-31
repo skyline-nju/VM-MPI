@@ -11,8 +11,8 @@ public:
   Cell();
   void find_neighbor(Cell* cell, int idx, int ncols, int nrows);
   void interact();
-  void interact(Cell *c2);
-  void interact(Cell *c2, double a, double b);
+  void interact(int neighbor_idx);
+  void interact(int neighbor_idx, double a, double b);
   void push_front(Node *node);
   Node* head;
   int size;
