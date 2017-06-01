@@ -25,7 +25,7 @@ void remove_ghost_particle(int row, int ncols, Cell *cell,
 }
 
 void sum_velocity(const Node *par, int end_pos,
-                 int &npar, double &svx, double &svy) {
+                  int &npar, double &svx, double &svy) {
   svx = 0;
   svy = 0;
   npar = 0;
@@ -38,9 +38,9 @@ void sum_velocity(const Node *par, int end_pos,
   }
 }
 
-int get_count_par_num(const Cell *cell, int ncols, int nrows, int row0) {
+int get_count_par_num(const Cell *cell, int ncols, int nrows) {
   int count = 0;
-  for (int row = row0; row < row0 + nrows; row++) {
+  for (int row = 1; row < nrows - 1; row++) {
     int j = row * ncols;
     for (int col = 0; col < ncols; col++) {
       count += cell[col + j].size;
@@ -48,27 +48,44 @@ int get_count_par_num(const Cell *cell, int ncols, int nrows, int row0) {
   }
   return count;
 }
-void create_cell_list(Cell *cell, Node *par, int nPar,
-                      int first_row, int ncols, double yl) {
-  int cell_idx0 = first_row * ncols;
-  for (size_t i = 0; i < nPar; i++) {
+
+void get_count_par_num(const Cell *cell, int ncols, int nrows, int *res) {
+  res[0] = res[1] = res[2] = 0;
+  for (int col = 0; col < ncols; col++) {
+    res[0] += cell[col + ncols].size;
+  }
+  for (int row = 2; row < nrows - 2; row++) {
+    int j = row * ncols;
+    for (int col = 0; col < ncols; col++) {
+      res[1] += cell[col + j].size;
+    }
+  }
+  for (int col = 0, j = (nrows - 2) * ncols; col < ncols; col++) {
+    res[2] += cell[col + j].size;
+  }
+  res[1] += (res[0] + res[2]);
+}
+
+void create_cell_list(Cell *cell, int ncols, double yl,
+                      Node *par, int nPar) {
+  for (int i = 0; i < nPar; i++) {
     int idx = par[i].cell_idx(yl, ncols);
     cell[idx].push_front(&par[i]);
   }
 }
 
-void update_position_inner_rows(double eta, Ran *myran, Node *par, int nPar,
-                                Cell *cell, int ncols, int nrows, int row0, 
+void update_position_inner_rows(double eta, Ran *myran,
+                                Node *par, int end_pos,
+                                Cell *cell, int ncols, int nrows, 
                                 double Lx, double yl) {
-  for (int row = row0 + 1; row < row0 + nrows - 1; row++) {
+  for (int row = 1; row < nrows - 1; row++) {
     int j = row * ncols;
     for (int col = 0; col < ncols; col++) {
       cell[col + j].head = NULL;
       cell[col + j].size = 0;
     }
   }
-  int cell_idx0 = row0 * ncols;
-  for (int i = 0; i < nPar; i++) {
+  for (int i = 0; i < end_pos; i++) {
     if (!par[i].is_empty) {
       if (!par[i].is_moved) {
         double noise = eta * 2.0 * PI * (myran->doub() - 0.5);
@@ -76,25 +93,26 @@ void update_position_inner_rows(double eta, Ran *myran, Node *par, int nPar,
       }
       par[i].is_moved = false;
       if (!par[i].is_ghost) {
-        int idx = par[i].cell_idx(yl, ncols) + cell_idx0;
+        int idx = par[i].cell_idx(yl, ncols);
         cell[idx].push_front(&par[i]);
       }
     }
   }
 }
 
-void update_position_edge_row(double eta, int row_r, Ran *myran, Cell *cell,
-                              int ncols, int nrows, int row0, int MAX_BUFF_SIZE,
-                              double Lx, double yl, double yh) {
-  if (row_r != 1 && row_r != nrows - 2) {
-    cout << "Error, row = " << row_r << " should be equal to "
+void update_position_edge_row(int row, double eta, Ran *myran,
+                              Cell *cell,int ncols, int nrows,
+                              double Lx, double yl, double yh,
+                              int MAX_BUFF_SIZE) {
+  if (row != 1 && row != nrows - 2) {
+    cout << "Error, row = " << row << " should be equal to "
          << 1 << " or " << nrows - 2 << endl;
     exit(1);
   }
   std::vector<Node *> ghost;
   ghost.reserve(MAX_BUFF_SIZE / 8);
   for (int col = 0; col < ncols; col++) {
-    int i = col + ncols * (row_r + row0);
+    int i = col + row * ncols;
     if (cell[i].head) {
       Node *curNode = cell[i].head;
       do {
@@ -108,15 +126,14 @@ void update_position_edge_row(double eta, int row_r, Ran *myran, Cell *cell,
       } while (curNode);
     }
   }
-  int cell_idx0 = ncols * row0;
   for (int i = 0, size = ghost.size(); i < size; i++) {
-    int c_idx = ghost[i]->cell_idx(yl, ncols) + cell_idx0;
+    int c_idx = ghost[i]->cell_idx(yl, ncols);
     cell[c_idx].push_front(ghost[i]);
   }
 }
 
 void pack(int row, double *buff, int &buff_size,
-          Cell *cell, int nrows, int ncols, int row0, double Ly,
+          Cell *cell, int nrows, int ncols, double Ly,
           int myrank, int tot_rank, int MAX_BUFF_SIZE) {
   double dy = 0;
   if (myrank == 0 && row < nrows / 2) {
@@ -125,7 +142,7 @@ void pack(int row, double *buff, int &buff_size,
     dy = -Ly;
   }
   int pos = 0;
-  int j = ncols * (row + row0);
+  int j = row * ncols;
   for (int col = 0; col < ncols; col++) {
     int i = col + j;
     if (cell[i].head) {
@@ -152,7 +169,7 @@ void pack(int row, double *buff, int &buff_size,
 }
 
 void unpack(int row, const double *buff, int buff_size,
-            Cell *cell, int nrows, int ncols, int row0, double yl,
+            Cell *cell, int nrows, int ncols, double yl,
             Node *par, int &end_pos, stack<Node *> &empty_pos) {
   bool ghost;
   if (row == 0 || row == nrows - 1) {
@@ -163,9 +180,8 @@ void unpack(int row, const double *buff, int buff_size,
     cout << "Failed to unpack, row = " << row << endl;
     exit(1);
   }
-  int j = ncols * (row + row0);
   int nPar = buff_size / 4;
-  for (int i = 0; i < nPar; i++) {
+  for (int i = 0, j = row * ncols; i < nPar; i++) {
     double x = buff[i * 4];
     double y = buff[i * 4 + 1];
     double vx = buff[i * 4 + 2];
@@ -212,9 +228,7 @@ StaticDomain::StaticDomain(double Lx_domain, double Ly_domain, int ntask,
   nrows = int(dLy) + 2;
   int tot_cells = ncols * nrows;
   cell = new Cell[tot_cells];
-  for (int i = 0; i < tot_cells; i++) {
-    cell[i].find_neighbor(cell, i, ncols, nrows);
-  }
+  Cell::find_all_neighbor(cell, ncols, nrows);
   myran = new Ran(seed + rank);
   tot_rank = ntask;
   myrank = rank;
@@ -242,21 +256,21 @@ void StaticDomain::create_particle_random(int nPar) {
   MAX_PAR = nPar * 2;
   particle = new Node[MAX_PAR];
   Node::ini_random(particle, nPar, myran, Lx, yl, yh);
-  create_cell_list(cell, particle, end_pos, 0, ncols, yl);
+  create_cell_list(cell, ncols, yl, particle, end_pos);
   MAX_BUFF_SIZE = nPar / (nrows - 2) * 10 * 4;
 }
 
 void StaticDomain::create_from_snap(const string filename) {
   Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
                       Lx, Ly, tot_rank, myrank);
-  create_cell_list(cell, particle, end_pos, 0, ncols, yl);
+  create_cell_list(cell, ncols, yl, particle, end_pos);
   cout << "rank = " << myrank << "\tN = " << end_pos << endl;
   MAX_BUFF_SIZE = end_pos / (nrows - 2) * 10 * 4;
 }
 
 void StaticDomain::comm_start(int source_row, int &dest_row,
-                           double **sbuff, double **rbuff,
-                           MPI_Request *sreq, MPI_Request *rreq) {
+                              double **sbuff, double **rbuff,
+                              MPI_Request *sreq, MPI_Request *rreq) {
   int source, dest, tag = source_row;
   if (source_row == nrows - 2 || source_row == nrows - 1) {
     source = pre_rank;
@@ -273,7 +287,7 @@ void StaticDomain::comm_start(int source_row, int &dest_row,
   double *send_buff = new double[MAX_BUFF_SIZE];
   double *recv_buff = new double[MAX_BUFF_SIZE];
   int send_buff_size;
-  pack(source_row, send_buff, send_buff_size, cell, nrows, ncols, 0, Ly,
+  pack(source_row, send_buff, send_buff_size, cell, nrows, ncols, Ly,
        myrank, tot_rank, MAX_BUFF_SIZE);
   MPI_Irecv(
     recv_buff, MAX_BUFF_SIZE, MPI_DOUBLE, source, tag, MPI_COMM_WORLD, rreq);
@@ -284,13 +298,12 @@ void StaticDomain::comm_start(int source_row, int &dest_row,
 }
 
 void StaticDomain::comm_end(int dest_row, double *sbuff, double *rbuff,
-                         MPI_Request *sreq, MPI_Request *rreq) {
+                            MPI_Request *sreq, MPI_Request *rreq) {
   MPI_Status stat;
   MPI_Wait(rreq, &stat);
   int recv_buff_size;
   MPI_Get_count(&stat, MPI_DOUBLE, &recv_buff_size);
-  //unpack(dest_row, rbuff, recv_buff_size);
-  unpack(dest_row, rbuff, recv_buff_size, cell, nrows, ncols, 0, yl,
+  unpack(dest_row, rbuff, recv_buff_size, cell, nrows, ncols, yl,
          particle, end_pos, empty_pos);
   delete[] rbuff;
   MPI_Wait(sreq, &stat);
@@ -341,15 +354,13 @@ void StaticDomain::update_position_MPI(double eta) {
 
   for (int i = 0; i < sreq.size(); i++) {
     int row = src_row[i] < nrows / 2 ? src_row[i] + 1 : src_row[i] - 1;
-    update_position_edge_row(eta, row, myran, cell, ncols, nrows, 0,
-                             MAX_BUFF_SIZE, Lx, yl, yh);
+    update_position_edge_row(row, eta, myran, cell, ncols, nrows,
+                             Lx, yl, yh, MAX_BUFF_SIZE);
     comm_start(src_row[i], dest_row[i], &sbuff[i], &rbuff[i],
                &sreq[i], &rreq[i]);
   }
-
   update_position_inner_rows(eta, myran, particle, end_pos,
-                             cell, ncols, nrows, 0, Lx, yl);
-
+                             cell, ncols, nrows, Lx, yl);
   for (int i = 0; i < sreq.size(); i++) {
     comm_end(dest_row[i], sbuff[i], rbuff[i], &sreq[i], &rreq[i]);
   }
@@ -404,13 +415,12 @@ DynamicDomain::DynamicDomain(double Lx_domain, double Ly_domain, int ntask,
   yh = (rank + 1) * dLy + 1;
   ncols = int(Lx);
   nrows = int(dLy) + 2;
-  first_row = nrows - 2;
+  int first_row = nrows - 2;
   MAX_CELL = ncols * (nrows -2) * 3;
-  cell = new Cell[MAX_CELL];
-  for (int row = first_row; row < first_row + nrows; row++) {
-    Cell::find_neighbor_one_row(cell, row, ncols, nrows, first_row);
-  }
-  delta_row_pre = delta_row_next = 0;
+  cell_buff = new Cell[MAX_CELL];
+  cell = cell_buff + first_row * ncols;
+  Cell::find_all_neighbor(cell, ncols, nrows);
+  row_offset[0] = row_offset[1] = 0;
   particle = NULL;
   myran = new Ran(seed + rank);
   tot_rank = ntask;
@@ -430,61 +440,175 @@ DynamicDomain::DynamicDomain(double Lx_domain, double Ly_domain, int ntask,
 }
 
 DynamicDomain::~DynamicDomain() {
-  delete[] cell;
+  delete[] cell_buff;
   delete[] particle;
   fout_phi.close();
 }
 
 void DynamicDomain::create_particle_random(int nPar) {
-  MAX_PAR = nPar * 2;
-  particle = new Node[MAX_PAR];
+  MAX_PAR_BUFF = nPar * 2;
+  particle = new Node[MAX_PAR_BUFF];
   end_pos = nPar;
   Node::ini_random(particle, nPar, myran, Lx, yl, yh);
-  create_cell_list(cell, particle, end_pos, first_row, ncols, yl);
+  create_cell_list(cell, ncols, yl, particle, end_pos);
   nPar_per_row = nPar / (nrows - 2);
+  nPar_per_task = nPar;
   MAX_BUFF_SIZE = nPar_per_row * 10 * 4;
 }
 
 void DynamicDomain::create_from_snap(const std::string filename) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
+  Node::ini_from_snap(&particle, end_pos, MAX_PAR_BUFF, filename,
                       Lx, Ly, tot_rank, myrank);
-  create_cell_list(cell, particle, end_pos, first_row, ncols, yl);
+  create_cell_list(cell, ncols, yl, particle, end_pos);
   nPar_per_row = end_pos / (nrows - 2);
+  nPar_per_task = end_pos;
   MAX_BUFF_SIZE = nPar_per_row * 10 * 4;
 }
 
 void DynamicDomain::rearrange() {
-  int my_nPar = get_count_par_num(cell, ncols, nrows, first_row);
-  int pre_nPar, next_nPar;
-  MPI_Sendrecv(&my_nPar, 1, MPI_INT, next_rank, 12,
-               &pre_nPar, 1, MPI_INT, pre_rank, 12,
-               MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
-  MPI_Sendrecv(&my_nPar, 1, MPI_INT, pre_rank, 21,
-               &next_nPar, 1, MPI_INT, next_rank, 21,
-               MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
-  int dn = my_nPar - pre_nPar;
-  if (dn > 2 * nPar_per_row){
-    delta_row_pre = -1;
-  } else if (dn < -2 * nPar_per_row) {
-    delta_row_pre = 1;
-  } else {
-    delta_row_pre = 0;
-  }
+  int my_nPar[3];
+  get_count_par_num(cell, ncols, nrows, my_nPar);
+  int *recvbuf = new int[tot_rank];
+  int *sendbuf = new int[tot_rank * 2];
 
-  dn = my_nPar - next_nPar;
-  if (dn > 2 * nPar_per_row) {
-    delta_row_next = -1;
-  } else if (dn < -2 * nPar_per_row) {
-    delta_row_next = 1;
-  } else {
-    delta_row_next = 0;
+  MPI_Gather(&my_nPar, 3, MPI_INT, recvbuf, 3, MPI_INT, 0, MPI_COMM_WORLD);
+  if (myrank == 0) {
+    sendbuf[0] = 0;
+    int threshold = 2 * nPar_per_row;
+    for (int i = 0; i < tot_rank - 1; i++) {
+      int j = 3 * i + 1;
+      int k = 2 * i + 1;
+      int dn = recvbuf[j] - nPar_per_task;
+      if (dn > threshold) {
+        if (recvbuf[j] > recvbuf[j + 3] || dn > 2 * threshold) {
+          recvbuf[j] -= recvbuf[j + 1];
+          recvbuf[j + 3] += recvbuf[j + 1];
+          sendbuf[k] = -1;
+          sendbuf[k + 1] = 1;
+        } else {
+          sendbuf[k] = 0;
+          sendbuf[k + 1] = 0;
+        }
+      } else if (dn < -threshold) {
+        if (recvbuf[j] < recvbuf[j + 3] || dn < -2 * threshold) {
+          recvbuf[j] += recvbuf[j + 1];
+          recvbuf[j + 3] -= recvbuf[j + 1];
+          sendbuf[k] = 1;
+          sendbuf[k + 1] = -1;
+        } else {
+          sendbuf[k] = 0;
+          sendbuf[k + 1] = 0;
+        }
+      }
+    }
+    sendbuf[2 * tot_rank - 1] = 0;
   }
+  MPI_Scatter(sendbuf, 2, MPI_INT, row_offset, 2, MPI_INT, 0, MPI_COMM_WORLD);
+  delete[] recvbuf;
+  delete[] sendbuf;
 }
 
 void DynamicDomain::update_velocity() {
   MPI_Request req[4];
   MPI_Status stat[4];
-  double (*buff)[4];
-  int sendrow[4];
-  int recvrow[4];
+  double *buff[4];
+  int buff_size[4];
+  int src_row[4];
+  int dest_row[4];
+
+  for (int i = 0; i < 4; i++) {
+    buff[i] = new double[MAX_BUFF_SIZE];
+    buff_size[i] = MAX_BUFF_SIZE;
+  }
+  
+  /* pack and transfer the data */
+  {
+    int i = 0;
+    /* pre_rank -> myrank -> next_rank */
+    if (row_offset[0] == 1) {
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                pre_rank, 12, MPI_COMM_WORLD, &req[i]);
+      i++;
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                pre_rank, 13, MPI_COMM_WORLD, &req[i]);
+      i++;
+    } else if (row_offset[0] == 0) {
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                pre_rank, 12, MPI_COMM_WORLD, &req[i]);
+      i++;
+    }
+    if (row_offset[1] == -1) {
+      pack(nrows - 2, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                next_rank, 12, MPI_COMM_WORLD, &req[i]);
+      i++;
+      pack(nrows - 3, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                next_rank, 13, MPI_COMM_WORLD, &req[i]);
+      i++;
+    } else if (row_offset[1] == 0) {
+      pack(nrows - 2, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                next_rank, 12, MPI_COMM_WORLD, &req[i]);
+      i++;
+    }
+    /* pre_rank <- myrank <- next_rank */
+    if (row_offset[1] == 1) {
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                next_rank, 21, MPI_COMM_WORLD, &req[i]);
+      i++;
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                next_rank, 31, MPI_COMM_WORLD, &req[i]);
+      i++;
+    } else if (row_offset[1] == 0) {
+      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+                next_rank, 21, MPI_COMM_WORLD, &req[i]);
+      i++;
+    }
+    if (row_offset[0] == -1) {
+      pack(1, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                pre_rank, 21, MPI_COMM_WORLD, &req[i]);
+      i++;
+      pack(2, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                pre_rank, 31, MPI_COMM_WORLD, &req[i]);
+      i++;
+    } else if (row_offset[1] == 0) {
+      pack(1, buff[i], buff_size[i],
+           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+      MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
+                pre_rank, 21, MPI_COMM_WORLD, &req[i]);
+      i++;
+    }
+  }
+  
+  /* update velocity for inner rows */
+  {
+    int beg_row = 1;
+    int end_row = nrows - 2;
+    for (int row = beg_row; row < end_row; row++)
+      Cell::update_velocity_inner_row(cell + row * ncols, ncols, Lx);
+  }
+
+  /* unpack the data and update velocity for remaining rows */
+  {
+    /* update the cell list */
+    Cell::update_neighbor(&cell, ncols, nrows, row_offset);
+    yl -= row_offset[0];
+    yh += row_offset[1];
+
+  }
+
+  for (int i = 0; i < 4; i++) {
+    delete[] buff[i];
+  }
+}
+
+void DynamicDomain::update_position(double eta) {
 }

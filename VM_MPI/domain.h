@@ -62,7 +62,7 @@ public:
   //void comm_end(int dest_row, double *sbuff, double *rbuff,
   //  MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity();
-  //void update_position_MPI(double eta);
+  void update_position(double eta);
   //void one_step_MPI(double eta, int t);
   //void output(int t);
 private:
@@ -76,19 +76,18 @@ private:
   double yl;
   double yh;
 
+  Cell *cell_buff;
   Cell *cell;
   int MAX_CELL;      /* Max number of cell */
   int ncols;
   int nrows;
-  int first_row;
-  int max_row;
-  int delta_row_pre;
-  int delta_row_next;
+  int row_offset[2];
 
   Node *particle;
-  int MAX_PAR;       /* Max number of particles */
+  int MAX_PAR_BUFF;       /* Max size for particle buff */
   int end_pos;       /* Last index */
   int nPar_per_row;
+  int nPar_per_task;
   std::stack <Node *> empty_pos;
 
   int MAX_BUFF_SIZE;

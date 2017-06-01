@@ -31,8 +31,14 @@ int main(int argc, char *argv[]) {
       cout << "t = " << i << endl;
     }
   }
+
   if (rank == 0) {
     cout << "elapsed time = " << MPI_Wtime() - t_beg << endl;
+    //Cell a[10];
+    //cout << sizeof(&a[0]) << endl;
+    //Cell *p = &a[9];
+    //int x = p - &a[0];
+    //cout << x << endl;
   }
   MPI_Finalize();
   return 0;

@@ -1,6 +1,9 @@
 #include "cell.h"
 using namespace std;
 
+int dcol[4] = { 1, -1, 0, 1 };
+int drow[4] = { 0, 1, 1, 1 };
+
 Cell::Cell() {
   head = NULL;
   size = 0;
@@ -9,11 +12,10 @@ Cell::Cell() {
   }
 }
 
-void Cell::find_neighbor(Cell *cell, int idx, int ncols, int nrows) {
-  int col0 = idx % ncols;
-  int row0 = idx / ncols;
-  int dcol[4] = { 1, -1, 0, 1 };
-  int drow[4] = { 0, 1, 1, 1 };
+void Cell::find_neighbor(Cell *cell, int ncols, int nrows,
+                         int col0, int row0) {
+
+  int idx = col0 + row0 * ncols;
   for (int i = 0; i < 4; i++) {
     int col = col0 + dcol[i];
     int row = row0 + drow[i];
@@ -25,31 +27,40 @@ void Cell::find_neighbor(Cell *cell, int idx, int ncols, int nrows) {
     if (row >= nrows) {
       row -= nrows;
     }
-    int idx_neighbor = col + row * ncols;
-    neighbor[i] = &cell[idx_neighbor];
+    cell[idx].neighbor[i] = &cell[col + row * ncols];
   }
 }
 
-void Cell::find_neighbor(Cell *cell, int col0, int row0,
-                         int ncols, int nrows, int first_row) {
-  int dcol[4] = { 1, -1, 0, 1 };
-  int drow[4] = { 0, 1, 1, 1 };
-  for (int i = 0; i < 4; i++) {
-    int col = col0 + dcol[i];
-    int row = row0 + drow[i];
-    if (col < 0) {
-      col += ncols;
-    } else if (col >= ncols) {
-      col -= ncols;
+void Cell::find_all_neighbor(Cell * cell, int ncols, int nrows) {
+  for (int row = 0; row < nrows; row++) {
+    for (int col = 0; col < ncols; col++) {
+      find_neighbor(cell, ncols, nrows, col, row);
     }
-    if (row < first_row) {
-      row += nrows;
-    } else if (row >= first_row + nrows) {
-      row -= nrows;
-    }
-    int idx_neighbor = col + row * ncols;
-    neighbor[i] = cell + idx_neighbor;
   }
+}
+
+void Cell::update_neighbor(Cell **cell, int ncols, int &nrows,
+                           const int *offset) {
+  Cell *p = *cell;
+  if (offset[0] == -1) {
+    nrows--;
+    p += ncols;
+  } else if (offset[0] == 1) {
+    nrows++;
+    p -= ncols;
+    for (int col = 0; col < ncols; col++)
+      find_neighbor(p, ncols, nrows, col, 0);
+  }
+  if (offset[1] == -1) {
+    nrows--;
+    for (int col = 0; col < ncols; col++)
+      find_neighbor(p, ncols, nrows, col, nrows - 2);
+  } else if (offset[1] == 1) {
+    nrows++;
+    for (int col = 0; col < ncols; col++)
+      find_neighbor(p, ncols, nrows, col, nrows - 2);
+  }
+  *cell = p;
 }
 
 void Cell::interact() {
@@ -159,11 +170,7 @@ void Cell::update_velocity_bottom_row(Cell *p, int ncols, double Lx) {
   }
 }
 
-void Cell::find_neighbor_one_row(Cell * cell, int row0,
-                                 int ncols, int nrows, int first_row) {
-  for (int col = 0; col < ncols; col++) {
-    cell[col + row0 * ncols].find_neighbor(
-      cell, col, row0, ncols, nrows, first_row);
-  }
-}
+
+
+
 
