@@ -9,8 +9,8 @@
 class StaticDomain
 {
 public:
-  StaticDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
-               unsigned long long seed, double eta, double eps, double rho0);
+  StaticDomain(double Lx0, double Ly0, unsigned long long seed,
+               double eta, double eps, double rho0);
   ~StaticDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string filename);
@@ -51,19 +51,15 @@ private:
 class DynamicDomain
 {
 public:
-  DynamicDomain(double Lx_domain, double Ly_domain, int ntask, int rank,
-                unsigned long long seed, double eta, double eps, double rho0);
+  DynamicDomain(double Lx0, double Ly0, unsigned long long seed,
+                double eta, double eps, double rho0);
   ~DynamicDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string filename);
   void rearrange();
-  //void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
-  //  MPI_Request *sreq, MPI_Request *rreq);
-  //void comm_end(int dest_row, double *sbuff, double *rbuff,
-  //  MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity();
   void update_position(double eta);
-  //void one_step_MPI(double eta, int t);
+  void one_step(double eta, int t);
   //void output(int t);
 private:
   int tot_rank;

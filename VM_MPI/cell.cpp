@@ -1,9 +1,6 @@
 #include "cell.h"
 using namespace std;
 
-int dcol[4] = { 1, -1, 0, 1 };
-int drow[4] = { 0, 1, 1, 1 };
-
 Cell::Cell() {
   head = NULL;
   size = 0;
@@ -11,6 +8,9 @@ Cell::Cell() {
     neighbor[i] = NULL;
   }
 }
+
+int dcol[4] = { 1, -1, 0, 1 };
+int drow[4] = { 0, 1, 1, 1 };
 
 void Cell::find_neighbor(Cell *cell, int ncols, int nrows,
                          int col0, int row0) {
@@ -39,29 +39,58 @@ void Cell::find_all_neighbor(Cell * cell, int ncols, int nrows) {
   }
 }
 
-void Cell::update_neighbor(Cell **cell, int ncols, int &nrows,
-                           const int *offset) {
+void Cell::clear_row(int row, int ncols, Cell *cell,
+                     stack<Node *> &empty_pos) {
+  for (int col = 0, j = row * ncols; col < ncols; col++) {
+    int idx = col + j;
+    if (cell[idx].head) {
+      Node *curNode = cell[idx].head;
+      do {
+        curNode->is_empty = true;
+        empty_pos.push(curNode);
+        curNode = curNode->next;
+      } while (curNode);
+      cell[idx].head = NULL;
+      cell[idx].size = 0;
+    }
+  }
+}
+
+void Cell::resize(Cell **cell, int ncols, int &nrows,
+                  const int *offset, stack<Node *> &empty_pos) {
   Cell *p = *cell;
   if (offset[0] == -1) {
+    clear_row(0, ncols, p, empty_pos);
     nrows--;
     p += ncols;
   } else if (offset[0] == 1) {
     nrows++;
     p -= ncols;
-    for (int col = 0; col < ncols; col++)
+    for (int col = 0; col < ncols; col++) {
+      p[col].head = NULL;
+      p[col].size = 0;
       find_neighbor(p, ncols, nrows, col, 0);
+    }
   }
   if (offset[1] == -1) {
+    clear_row(nrows - 1, ncols, p, empty_pos);
     nrows--;
     for (int col = 0; col < ncols; col++)
       find_neighbor(p, ncols, nrows, col, nrows - 2);
   } else if (offset[1] == 1) {
     nrows++;
-    for (int col = 0; col < ncols; col++)
+    for (int col = 0; col < ncols; col++) {
+      p[col].head = NULL;
+      p[col].size = 0;
       find_neighbor(p, ncols, nrows, col, nrows - 2);
+    }
   }
   *cell = p;
 }
+
+/****************************************************************************/
+/*          Using cell list to speed up the calculation of interactions     */
+/****************************************************************************/
 
 void Cell::interact() {
   Node *node1 = head;
@@ -170,7 +199,9 @@ void Cell::update_velocity_bottom_row(Cell *p, int ncols, double Lx) {
   }
 }
 
-
-
-
-
+void Cell::update_velocity_by_row(int row, Cell *cell, int ncols, double Lx) {
+  if (row > 0)
+    update_velocity_inner_row(cell + row * ncols, ncols, Lx);
+  else
+    update_velocity_bottom_row(cell, ncols, Lx);
+}
