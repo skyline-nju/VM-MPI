@@ -14,10 +14,6 @@ public:
   ~StaticDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string &filename);
-  void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
-                  MPI_Request *sreq, MPI_Request *rreq);
-  void comm_end(int dest_row, double *sbuff, double *rbuff,
-                MPI_Request *sreq, MPI_Request *rreq);
   void update_velocity();
   void update_position(double eta);
   void one_step(double eta, int t);
@@ -42,7 +38,7 @@ private:
   int end_pos;
   std::stack <Node *> empty_pos;
 
-  int MAX_BUFF_SIZE;
+  int MAX_BUF_SIZE;
   Ran *myran;
 
   std::ofstream fout_phi;
@@ -72,7 +68,7 @@ private:
   double yl;
   double yh;
 
-  Cell *cell_buff;
+  Cell *cell_buf;
   Cell *cell;
   int MAX_CELL;      /* Max number of cell */
   int ncols;
@@ -80,13 +76,13 @@ private:
   int row_offset[2];
 
   Node *particle;
-  int MAX_PAR;       /* Max size for particle buff */
+  int MAX_PAR;       /* Max size for particle buf */
   int end_pos;       /* Last index */
   int nPar_per_row;
   int nPar_per_task;
   std::stack <Node *> empty_pos;
 
-  int MAX_BUFF_SIZE;
+  int MAX_BUF_SIZE;
 
   Ran *myran;
   std::ofstream fout_phi;
