@@ -465,12 +465,13 @@ void DynamicDomain::create_from_snap(const string &filename) {
 void DynamicDomain::rearrange() {
   int my_nPar[3];
   get_count_par_num(cell, ncols, nrows, my_nPar);
-  int *recvbuf = new int[tot_rank];
+  int *recvbuf = new int[tot_rank * 3];
   int *sendbuf = new int[tot_rank * 2];
 
   MPI_Gather(&my_nPar, 3, MPI_INT, recvbuf, 3, MPI_INT, 0, MPI_COMM_WORLD);
   if (myrank == 0) {
-    sendbuf[0] = 0;
+    for (int i = 0; i < tot_rank * 2; i++)
+      sendbuf[i] = 0;
     int threshold = 2 * nPar_per_row;
     for (int i = 0; i < tot_rank - 1; i++) {
       int j = 3 * i + 1;
@@ -482,9 +483,6 @@ void DynamicDomain::rearrange() {
           recvbuf[j + 3] += recvbuf[j + 1];
           sendbuf[k] = -1;
           sendbuf[k + 1] = 1;
-        } else {
-          sendbuf[k] = 0;
-          sendbuf[k + 1] = 0;
         }
       } else if (dn < -threshold) {
         if (recvbuf[j] < recvbuf[j + 3] || dn < -2 * threshold) {
@@ -492,13 +490,9 @@ void DynamicDomain::rearrange() {
           recvbuf[j + 3] -= recvbuf[j + 1];
           sendbuf[k] = 1;
           sendbuf[k + 1] = -1;
-        } else {
-          sendbuf[k] = 0;
-          sendbuf[k + 1] = 0;
         }
       }
     }
-    sendbuf[2 * tot_rank - 1] = 0;
   }
   MPI_Scatter(sendbuf, 2, MPI_INT, row_offset, 2, MPI_INT, 0, MPI_COMM_WORLD);
   delete[] recvbuf;
@@ -651,8 +645,8 @@ void DynamicDomain::update_position(double eta) {
 void DynamicDomain::one_step(double eta, int t) {
   update_velocity();
   update_position(eta);
-  //rearrange();
   output(t);
+  rearrange();
 }
 
 void DynamicDomain::output(int t) {

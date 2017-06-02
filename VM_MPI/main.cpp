@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
     t_beg = MPI_Wtime();
   }
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 2000; i++) {
     subdomain.one_step(eta, i);
     if (i % 1000 == 0 && rank == 0) {
       cout << "t = " << i << endl;
