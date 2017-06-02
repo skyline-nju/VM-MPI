@@ -15,7 +15,7 @@ struct Node
   static void ini_random(Node *par, int nPar, Ran *myran,
                          double Lx, double yl, double yh);
   static void ini_from_snap(Node **par, int &npar, int &max_par_num,
-                            const std::string filename, double Lx, double Ly,
+                            const std::string &filename, double Lx, double Ly,
                             int tot_rank, int myrank);
 
   double x;

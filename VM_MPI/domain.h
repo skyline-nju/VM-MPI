@@ -13,14 +13,14 @@ public:
                double eta, double eps, double rho0);
   ~StaticDomain();
   void create_particle_random(int nPar);
-  void create_from_snap(const std::string filename);
+  void create_from_snap(const std::string &filename);
   void comm_start(int src_row, int &dest_row, double **sbuff, double **rbuff,
                   MPI_Request *sreq, MPI_Request *rreq);
   void comm_end(int dest_row, double *sbuff, double *rbuff,
                 MPI_Request *sreq, MPI_Request *rreq);
-  void update_velocity_MPI();
-  void update_position_MPI(double eta);
-  void one_step_MPI(double eta, int t);
+  void update_velocity();
+  void update_position(double eta);
+  void one_step(double eta, int t);
   void output(int t);
 private:
   double Lx;
@@ -55,12 +55,12 @@ public:
                 double eta, double eps, double rho0);
   ~DynamicDomain();
   void create_particle_random(int nPar);
-  void create_from_snap(const std::string filename);
+  void create_from_snap(const std::string &filename);
   void rearrange();
   void update_velocity();
   void update_position(double eta);
   void one_step(double eta, int t);
-  //void output(int t);
+  void output(int t);
 private:
   int tot_rank;
   int myrank;
@@ -80,7 +80,7 @@ private:
   int row_offset[2];
 
   Node *particle;
-  int MAX_PAR_BUFF;       /* Max size for particle buff */
+  int MAX_PAR;       /* Max size for particle buff */
   int end_pos;       /* Last index */
   int nPar_per_row;
   int nPar_per_task;

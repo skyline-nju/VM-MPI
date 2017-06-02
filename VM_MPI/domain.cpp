@@ -120,13 +120,14 @@ void update_position_edge_row(int row, double eta, Ran *myran,
 
 void pack(int row, double *buff, int &buff_size,
           Cell *cell, int nrows, int ncols, double Ly,
-          int myrank, int tot_rank, int MAX_BUFF_SIZE) {
+          int myrank, int tot_rank) {
   double dy = 0;
   if (myrank == 0 && row < nrows / 2) {
     dy = Ly;
   } else if (myrank == tot_rank - 1 && row > nrows / 2) {
     dy = -Ly;
   }
+  int MAX_SIZE = buff_size;
   int pos = 0;
   int j = row * ncols;
   for (int col = 0; col < ncols; col++) {
@@ -143,9 +144,9 @@ void pack(int row, double *buff, int &buff_size,
           curNode->new_arrival = false;
         }
         curNode = curNode->next;
-        if (pos >= MAX_BUFF_SIZE) {
+        if (pos >= MAX_SIZE) {
           cout << "Error, pos = " << pos << " is larger than MAX_BUFF_SIZE = "
-               << MAX_BUFF_SIZE << endl;
+               << MAX_SIZE << endl;
           exit(1);
         }
       } while (curNode);
@@ -246,7 +247,7 @@ void StaticDomain::create_particle_random(int nPar) {
   MAX_BUFF_SIZE = nPar / (nrows - 2) * 10 * 4;
 }
 
-void StaticDomain::create_from_snap(const string filename) {
+void StaticDomain::create_from_snap(const string &filename) {
   Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
                       Lx, Ly, tot_rank, myrank);
   create_cell_list(cell, ncols, yl, particle, end_pos);
@@ -272,9 +273,9 @@ void StaticDomain::comm_start(int source_row, int &dest_row,
   }
   double *send_buff = new double[MAX_BUFF_SIZE];
   double *recv_buff = new double[MAX_BUFF_SIZE];
-  int send_buff_size;
+  int send_buff_size = MAX_BUFF_SIZE;
   pack(source_row, send_buff, send_buff_size, cell, nrows, ncols, Ly,
-       myrank, tot_rank, MAX_BUFF_SIZE);
+       myrank, tot_rank);
   MPI_Irecv(
     recv_buff, MAX_BUFF_SIZE, MPI_DOUBLE, source, tag, MPI_COMM_WORLD, rreq);
   MPI_Isend(
@@ -296,7 +297,7 @@ void StaticDomain::comm_end(int dest_row, double *sbuff, double *rbuff,
   delete[] sbuff;
 }
 
-void StaticDomain::update_velocity_MPI() {
+void StaticDomain::update_velocity() {
   vector<MPI_Request> sreq(2);
   vector<MPI_Request> rreq(2);
   vector<double *> sbuff(2);
@@ -323,7 +324,7 @@ void StaticDomain::update_velocity_MPI() {
   }
 }
 
-void StaticDomain::update_position_MPI(double eta) {
+void StaticDomain::update_position(double eta) {
   vector<MPI_Request> sreq(2);
   vector<MPI_Request> rreq(2);
   vector<double *> sbuff(2);
@@ -347,9 +348,9 @@ void StaticDomain::update_position_MPI(double eta) {
   }
 }
 
-void StaticDomain::one_step_MPI(double eta, int t) {
-  update_velocity_MPI();
-  update_position_MPI(eta);
+void StaticDomain::one_step(double eta, int t) {
+  update_velocity();
+  update_position(eta);
   output(t);
 }
 
@@ -411,12 +412,12 @@ DynamicDomain::DynamicDomain(double Lx0, double Ly0, unsigned long long seed,
   cout << "\tnext rank " << next_rank << endl;
   cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
 
-  //if (myrank == 0) {
-  //  char fname[100];
-  //  snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
-  //    eta, eps, rho0, Lx, Ly, seed, tot_rank);
-  //  fout_phi.open(fname);
-  //}
+  if (myrank == 0) {
+    char fname[100];
+    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
+      eta, eps, rho0, Lx, Ly, seed, tot_rank);
+    fout_phi.open(fname);
+  }
 }
 
 DynamicDomain::~DynamicDomain() {
@@ -426,8 +427,8 @@ DynamicDomain::~DynamicDomain() {
 }
 
 void DynamicDomain::create_particle_random(int nPar) {
-  MAX_PAR_BUFF = nPar * 2;
-  particle = new Node[MAX_PAR_BUFF];
+  MAX_PAR = nPar * 2;
+  particle = new Node[MAX_PAR];
   end_pos = nPar;
   Node::ini_random(particle, nPar, myran, Lx, yl, yh);
   create_cell_list(cell, ncols, yl, particle, end_pos);
@@ -436,10 +437,9 @@ void DynamicDomain::create_particle_random(int nPar) {
   MAX_BUFF_SIZE = nPar_per_row * 10 * 4;
 }
 
-void DynamicDomain::create_from_snap(const string filename) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR_BUFF, filename,
+void DynamicDomain::create_from_snap(const string &filename) {
+  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
                       Lx, Ly, tot_rank, myrank);
-  cout << "b1" << endl;
   create_cell_list(cell, ncols, yl, particle, end_pos);
   nPar_per_row = end_pos / (nrows - 2);
   nPar_per_task = end_pos;
@@ -499,14 +499,13 @@ void DynamicDomain::update_velocity() {
     buff[i] = new double[MAX_BUFF_SIZE];
     buff_size[i] = MAX_BUFF_SIZE;
   }
-  
   /* pack and transfer the data */
   {
     int i = 0;
     /* pre_rank -> myrank */
     for (int j = 0; j <= row_offset[0]; j++) {
       int tag = 12 + j;
-      MPI_Irecv(buff[i], MAX_BUFF_SIZE, MPI_DOUBLE,
+      MPI_Irecv(buff[i], buff_size[i], MPI_DOUBLE,
                 pre_rank, tag, MPI_COMM_WORLD, &req[i]);
       i++;
     }
@@ -514,7 +513,7 @@ void DynamicDomain::update_velocity() {
     for (int j = 0; j >= row_offset[1]; j--) {
       int tag = 12 - j;
       pack(nrows - 2 + j, buff[i], buff_size[i],
-           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+           cell, nrows, ncols, Ly, myrank, tot_rank);
       MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
                 next_rank, tag, MPI_COMM_WORLD, &req[i]);
       i++;
@@ -530,24 +529,23 @@ void DynamicDomain::update_velocity() {
     for (int j = 0; j >= row_offset[0]; j--) {
       int tag = 21 - j * 10;
       pack(1 - j, buff[i], buff_size[i],
-           cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+           cell, nrows, ncols, Ly, myrank, tot_rank);
       MPI_Isend(buff[i], buff_size[i], MPI_DOUBLE,
-                next_rank, tag, MPI_COMM_WORLD, &req[i]);
+                pre_rank, tag, MPI_COMM_WORLD, &req[i]);
       i++;
     }
   }
-  
   /* update velocity for inner rows */
   for (int row = 1; row < nrows - 2; row++)
     Cell::update_velocity_inner_row(cell + row * ncols, ncols, Lx);
 
+  /* update the size of the cell list */
+  Cell::resize(&cell, ncols, nrows, row_offset, empty_pos);
+  yl -= row_offset[0];
+  yh += row_offset[1];
+
   /* unpack the received data and update velocity for remaining rows */
   {
-    /* update the size of the cell list */
-    Cell::resize(&cell, ncols, nrows, row_offset, empty_pos);
-    yl -= row_offset[0];
-    yh += row_offset[1];
-    
     int i = 0;
     for (int j = 0; j < row_offset[0]; j++) {
       int row = 1 - j;
@@ -559,7 +557,6 @@ void DynamicDomain::update_velocity() {
       i++;
     }
     Cell::clear_row(0, ncols, cell, empty_pos);
-    
     if (row_offset[1] == 0)
       i++;
     for (int j = 0; j < row_offset[1]; j++) {
@@ -573,10 +570,10 @@ void DynamicDomain::update_velocity() {
     }
     Cell::clear_row(nrows - 1, ncols, cell, empty_pos);
   }
-
   MPI_Waitall(4, req, stat);
   for (int i = 0; i < 4; i++) {
     delete[] buff[i];
+    buff[i] = NULL;
   }
 }
 
@@ -598,7 +595,7 @@ void DynamicDomain::update_position(double eta) {
   update_position_edge_row(nrows - 2, eta, myran, cell, ncols, nrows,
                             Lx, yl, yh, MAX_BUFF_SIZE);
   pack(nrows - 1, buff[1], buff_size[1],
-        cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+        cell, nrows, ncols, Ly, myrank, tot_rank);
   MPI_Isend(buff[1], buff_size[1], MPI_DOUBLE,
             next_rank, 12, MPI_COMM_WORLD, &req[1]);
 
@@ -609,7 +606,7 @@ void DynamicDomain::update_position(double eta) {
   update_position_edge_row(1, eta, myran, cell, ncols, nrows,
                             Lx, yl, yh, MAX_BUFF_SIZE);
   pack(0, buff[3], buff_size[3],
-        cell, nrows, ncols, Ly, myrank, tot_rank, MAX_BUFF_SIZE);
+        cell, nrows, ncols, Ly, myrank, tot_rank);
   MPI_Isend(buff[3], buff_size[3], MPI_DOUBLE,
             pre_rank, 21, MPI_COMM_WORLD, &req[3]);
 
@@ -637,6 +634,35 @@ void DynamicDomain::update_position(double eta) {
 
 void DynamicDomain::one_step(double eta, int t) {
   update_velocity();
-  //update_position(eta);
-  //output(t);
+  update_position(eta);
+  output(t);
+}
+
+void DynamicDomain::output(int t) {
+  if (t % 100 == 0) {
+    double sv[2];
+    int sub_N;
+    sum_velocity(particle, end_pos, sub_N, sv[0], sv[1]);
+    double tot_v[2];
+    int *num = new int[tot_rank];
+    MPI_Gather(&sub_N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myrank == 0) {
+      int totN = 0;
+      double sum_N2 = 0;
+      for (int i = 0; i < tot_rank; i++) {
+        totN += num[i];
+        sum_N2 += num[i] * num[i];
+      }
+      double mean_N = totN / tot_rank;
+      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / totN;
+      double theta = atan2(tot_v[1], tot_v[0]);
+      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << totN;
+      for (int i = 0; i < tot_rank; i++) {
+        fout_phi << "\t" << num[i] - totN / tot_rank;
+      }
+      fout_phi << endl;
+    }
+    delete[] num;
+  }
 }

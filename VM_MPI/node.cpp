@@ -51,7 +51,7 @@ void Node::ini_random(Node * par, int nPar, Ran * myran,
 }
 
 void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
-                         const std::string filename, double Lx, double Ly,
+                         const std::string &filename, double Lx, double Ly,
                          int tot_rank, int myrank) {
   MPI_File fin;
   if (!exist(filename.c_str())) {
@@ -80,8 +80,9 @@ void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
     exit(1);
   }
   int npar_in = size_buff / 3;
+  npar = npar_in * nx * ny;
+  max_par_num = npar * 3;
   int idx = 0;
-  max_par_num = npar * nx * ny * 3;
   Node *particle = new Node[max_par_num];
   for (int row = 0; row < ny; row++) {
     double dy = row * ly + Ly / tot_rank * myrank;
@@ -100,7 +101,6 @@ void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
       }
     }
   }
-  npar = idx;
   *par = particle;
   delete[] buff;
 }
