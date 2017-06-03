@@ -28,18 +28,13 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
   if (myrank == 0) {
     char fname[100];
     snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
-      eta, eps, rho0, Lx, Ly, seed, tot_rank);
+             eta, eps, rho0, Lx, Ly, seed, tot_rank);
     fout_phi.open(fname);
   }
 
   cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
   cout << "\tnext rank " << next_rank << endl;
   cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
-}
-
-BasicDomain::~BasicDomain() {
-  if (myrank == 0)
-    fout_phi.close();
 }
 
 void BasicDomain::create_particle_random(int nPar, double multiple) {
@@ -277,6 +272,7 @@ StaticDomain::StaticDomain(double eta, double eps, double rho0,
 StaticDomain::~StaticDomain() {
   delete[] cell;
   delete[] particle;
+  fout_phi.close();
 }
 
 void StaticDomain::update_velocity() {
@@ -345,6 +341,7 @@ DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
 DynamicDomain::~DynamicDomain() {
   delete[] cell_buf;
   delete[] particle;
+  fout_phi.close();
 }
 
 void DynamicDomain::rearrange_domain(int t) {

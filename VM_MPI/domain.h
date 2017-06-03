@@ -15,7 +15,7 @@ class BasicDomain
 public:
   BasicDomain(double eta, double eps, double rho0,
               double Lx0, double Ly0, unsigned long long seed);
-  ~BasicDomain();
+  virtual ~BasicDomain() {};
   void create_particle_random(int nPar, double multiple);
   void create_from_snap(const std::string &filename);
   void output(int t);
@@ -31,6 +31,9 @@ public:
             MPI_Request *req);
   void accept(int row, double *buf, int *buf_size,
               MPI_Request *req, MPI_Status *stat);
+  virtual void update_velocity() = 0;
+  virtual void one_step(double eta, int t) = 0;
+  virtual void rearrange_domain(int t) = 0;
 
 protected:
   int tot_rank;
@@ -84,6 +87,7 @@ public:
   StaticDomain(double eta, double eps, double rho0,
                double Lx0, double Ly0, unsigned long long seed);
   ~StaticDomain();
+  void rearrange_domain(int t) {};
   void update_velocity();
   void one_step(double eta, int t);
 };
@@ -94,13 +98,21 @@ public:
   DynamicDomain(double eta, double eps, double rho0,
                 double Lx0, double Ly0, unsigned long long seed);
   ~DynamicDomain();
-  void rearrange_domain(int t);
+
+  void rearrange_domain(int t);       /* update row_offset */
   void update_velocity();
   void one_step(double eta, int t);
+
 private:
-  Cell *cell_buf;
-  int CELL_BUF_SIZE;
-  int row_offset[2];
+  Cell *cell_buf;     // The size of cell_buf is larger than the size of
+  int CELL_BUF_SIZE;  // cell, so that there is enough space for cell to
+                      // expand or shrink.
+                      
+
+  int row_offset[2];  // Control the size of subdomain. row_offset[0] = 1
+                      // means the bottom boundary of the subdomain moves
+                      // downward by 1, while row_offset[1] = 1 means the
+                      // top boundary moves upward by 1.
 };
 
 #endif
