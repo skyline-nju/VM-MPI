@@ -1,3 +1,7 @@
+/****************************************************************************/
+/*          Using cell list to speed up the calculation of interactions     */
+/*          between two particles within range 1.                           */
+/****************************************************************************/
 #ifndef CELL_H
 #define CELL_H
 #include "node.h"
@@ -24,9 +28,12 @@ public:
                         std::stack<Node *> &empty_pos);
   static void resize(Cell **cell, int ncols, int &nrows,
                      const int *offset, std::stack<Node *> &empty_pos);
+  static int get_nPar(const Cell *cell, int ncols, int nrows);
+  static void get_nPar(const Cell *cell, int ncols, int nrows, int *count);
+ 
   Node* head;
   int size;
-  Cell *neighbor[4];
+  Cell *neighbor[4];    // right, upper left, upper, upper right
 };
 
 inline void Cell::push_front(Node *node) {
@@ -35,4 +42,10 @@ inline void Cell::push_front(Node *node) {
   size++;
 }
 
+inline void Cell::update_velocity_by_row(int row, Cell *cell, int ncols, double Lx) {
+  if (row > 0)
+    update_velocity_inner_row(cell + row * ncols, ncols, Lx);
+  else
+    update_velocity_bottom_row(cell, ncols, Lx);
+}
 #endif

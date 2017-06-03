@@ -4,107 +4,103 @@
 using namespace std;
 
 /****************************************************************************/
-/*                        Common functions                                  */
+/*                   Basic class for subdomain                              */
 /****************************************************************************/
+BasicDomain::BasicDomain(double eta, double eps, double rho0,
+                         double Lx0, double Ly0, unsigned long long seed):
+                         Lx(Lx0), Ly(Ly0) {
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
+  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
 
-void sum_velocity(const Node *par, int end_pos,
-                  int &npar, double &svx, double &svy) {
-  svx = 0;
-  svy = 0;
-  npar = 0;
-  for (int i = 0; i < end_pos; i++) {
-    if (!par[i].is_empty && !par[i].is_ghost) {
-      svx += par[i].vx;
-      svy += par[i].vy;
-      npar++;
-    }
+  double dLy = Ly / tot_rank;
+  yl = myrank * dLy - 1;
+  yh = (myrank + 1) * dLy + 1;
+  ncols = int(Lx);
+  nrows = int(dLy) + 2;
+  cell = NULL;
+
+  particle = NULL;
+  MAX_PAR = end_pos = MAX_BUF_SIZE = nPar_per_row = nPar_per_task = 0;
+
+  myran = new Ran(seed + myrank);
+  if (myrank == 0) {
+    char fname[100];
+    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
+      eta, eps, rho0, Lx, Ly, seed, tot_rank);
+    fout_phi.open(fname);
   }
+
+  cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
+  cout << "\tnext rank " << next_rank << endl;
+  cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
 }
 
-int get_count_par_num(const Node *par, int end_pos) {
-  int count = 0;
-  for (int i = 0; i < end_pos; i++) {
-    if (!par[i].is_empty && !par[i].is_ghost) {
-      count++;
-    }
-  }
-  return count;
+BasicDomain::~BasicDomain() {
+  if (myrank == 0)
+    fout_phi.close();
 }
 
-int get_count_par_num(const Cell *cell, int ncols, int nrows) {
-  int count = 0;
-  for (int row = 1; row < nrows - 1; row++) {
-    int j = row * ncols;
-    for (int col = 0; col < ncols; col++) {
-      count += cell[col + j].size;
-    }
-  }
-  return count;
+void BasicDomain::create_particle_random(int nPar, double multiple) {
+  MAX_PAR = int(nPar * multiple);
+  particle = new Node[MAX_PAR];
+  end_pos = nPar;
+  Node::ini_random(particle, nPar, myran, Lx, yl, yh);
+  create_cell_list();
+  nPar_per_row = nPar / (nrows - 2);
+  nPar_per_task = nPar;
+  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 }
 
-void get_count_par_num(const Cell *cell, int ncols, int nrows, int *res) {
-  res[0] = res[1] = res[2] = 0;
-  for (int col = 0; col < ncols; col++) {
-    res[0] += cell[col + ncols].size;
-  }
-  for (int row = 2; row < nrows - 2; row++) {
-    int j = row * ncols;
-    for (int col = 0; col < ncols; col++) {
-      res[1] += cell[col + j].size;
-    }
-  }
-  for (int col = 0, j = (nrows - 2) * ncols; col < ncols; col++) {
-    res[2] += cell[col + j].size;
-  }
-  res[1] += (res[0] + res[2]);
+void BasicDomain::create_from_snap(const string & filename) {
+  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
+                      Lx, Ly, tot_rank, myrank);
+  create_cell_list();
+  nPar_per_row = end_pos / (nrows - 2);
+  nPar_per_task = end_pos;
+  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 }
 
-void create_cell_list(Cell *cell, int ncols, double yl,
-                      Node *par, int nPar) {
-  for (int i = 0; i < nPar; i++) {
-    int idx = par[i].cell_idx(yl, ncols);
-    cell[idx].push_front(&par[i]);
-  }
-}
-
-void update_position_inner_rows(double eta, Ran *myran,
-                                Node *par, int end_pos,
-                                Cell *cell, int ncols, int nrows, 
-                                double Lx, double yl) {
-  for (int row = 1; row < nrows - 1; row++) {
-    int j = row * ncols;
-    for (int col = 0; col < ncols; col++) {
-      cell[col + j].head = NULL;
-      cell[col + j].size = 0;
-    }
-  }
-  for (int i = 0; i < end_pos; i++) {
-    if (!par[i].is_empty) {
-      if (!par[i].is_moved) {
-        double noise = eta * 2.0 * PI * (myran->doub() - 0.5);
-        par[i].update_coor(noise, Lx, yl);
-        par[i].is_ghost = false;
+void BasicDomain::output(int t) {
+  if (t % 100 == 0) {
+    double sv[2];
+    int my_num;
+    Node::sum_v(particle, end_pos, my_num, sv[0], sv[1]);
+    double tot_v[2];
+    int *num = new int[tot_rank];
+    MPI_Gather(&my_num, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myrank == 0) {
+      int sum_num = 0;
+      for (int i = 0; i < tot_rank; i++) sum_num += num[i];
+      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / sum_num;
+      double theta = atan2(tot_v[1], tot_v[0]);
+      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << sum_num;
+      for (int i = 0; i < tot_rank; i++) {
+        fout_phi << "\t" << num[i] - sum_num / tot_rank;
       }
-      if (!par[i].is_ghost) {
-        int idx = par[i].cell_idx(yl, ncols);
-        cell[idx].push_front(&par[i]);
-      }
-      par[i].is_moved = false;   /* set all occupied particles unmoved */
+      fout_phi << endl;
     }
+    delete[] num;
   }
 }
 
-void update_position_edge_row(int row, double eta, Ran *myran,
-                              Cell *cell,int ncols, int nrows,
-                              double Lx, double yl, double yh,
-                              int MAX_BUFF_SIZE) {
+void BasicDomain::create_cell_list() {
+  for (int i = 0; i < end_pos; i++) {
+    int idx = particle[i].cell_idx(yl, ncols);
+    cell[idx].push_front(&particle[i]);
+  }
+}
+
+void BasicDomain::update_position_edge_row(int row, double eta) {
   if (row != 1 && row != nrows - 2) {
     cout << "Error, row = " << row << " should be equal to "
-         << 1 << " or " << nrows - 2 << endl;
+      << 1 << " or " << nrows - 2 << endl;
     exit(1);
   }
   std::vector<Node *> ghost;
-  ghost.reserve(MAX_BUFF_SIZE / 8);
+  ghost.reserve(MAX_BUF_SIZE / 8);
   for (int col = 0; col < ncols; col++) {
     int i = col + row * ncols;
     if (cell[i].head) {
@@ -129,9 +125,31 @@ void update_position_edge_row(int row, double eta, Ran *myran,
   }
 }
 
-void pack(int row, double *buf, int &buf_size,
-          Cell *cell, int nrows, int ncols, double Ly,
-          int myrank, int tot_rank) {
+void BasicDomain::update_position_inner_rows(double eta) {
+  for (int row = 1; row < nrows - 1; row++) {
+    int j = row * ncols;
+    for (int col = 0; col < ncols; col++) {
+      cell[col + j].head = NULL;
+      cell[col + j].size = 0;
+    }
+  }
+  for (int i = 0; i < end_pos; i++) {
+    if (!particle[i].is_empty) {
+      if (!particle[i].is_moved) {
+        double noise = eta * 2.0 * PI * (myran->doub() - 0.5);
+        particle[i].update_coor(noise, Lx, yl);
+        particle[i].is_ghost = false;
+      }
+      if (!particle[i].is_ghost) {
+        int idx = particle[i].cell_idx(yl, ncols);
+        cell[idx].push_front(&particle[i]);
+      }
+      particle[i].is_moved = false;   /* set all occupied particles unmoved */
+    }
+  }
+}
+
+void BasicDomain::pack(int row, double * buf, int &buf_size) {
   double dy = 0;
   if (myrank == 0 && row < nrows / 2) {
     dy = Ly;
@@ -157,7 +175,7 @@ void pack(int row, double *buf, int &buf_size,
         curNode = curNode->next;
         if (pos >= MAX_SIZE) {
           cout << "Error, pos = " << pos << " is larger than MAX_BUFF_SIZE = "
-               << MAX_SIZE << endl;
+            << MAX_SIZE << endl;
           exit(1);
         }
       } while (curNode);
@@ -166,9 +184,7 @@ void pack(int row, double *buf, int &buf_size,
   buf_size = pos;
 }
 
-void unpack(int row, const double *buf, int buf_size,
-            Cell *cell, int nrows, int ncols, double yl,
-            Node *par, int &end_pos, stack<Node *> &empty_pos) {
+void BasicDomain::unpack(int row, const double *buf, int buf_size) {
   bool ghost;
   if (row == 0 || row == nrows - 1) {
     ghost = true;
@@ -187,7 +203,7 @@ void unpack(int row, const double *buf, int buf_size,
     int cell_idx = int(x) + j;
     if (int(y - yl) != row) {
       cout << "Error, y = " << y << "\tint(y - yl) = "
-           << int(y - yl) << "\trow = " << row << endl;
+        << int(y - yl) << "\trow = " << row << endl;
       exit(1);
     }
     Node *p = NULL;
@@ -195,7 +211,7 @@ void unpack(int row, const double *buf, int buf_size,
       p = empty_pos.top();
       empty_pos.pop();
     } else {
-      p = par + end_pos;
+      p = particle + end_pos;
       end_pos++;
     }
     p->x = x;
@@ -210,60 +226,57 @@ void unpack(int row, const double *buf, int buf_size,
   }
 }
 
+void BasicDomain::update_position(double eta) {
+  MPI_Request req[4];
+  MPI_Status stat[4];
+  double *buf[4];
+  int buf_size[4];
+
+  for (int i = 0; i < 4; i++) {
+    buf[i] = new double[MAX_BUF_SIZE];
+    buf_size[i] = MAX_BUF_SIZE;
+  }
+
+  /* pre_rank -> myrank */
+  recv(buf[0], buf_size[0], pre_rank, 12, &req[0]);
+  /* myrank -> next_rank */
+  update_position_edge_row(nrows - 2, eta);
+  send(nrows - 1, buf[1], buf_size[1], next_rank, 12, &req[1]);
+  /* myrank <- next_rank */
+  recv(buf[2], buf_size[2], next_rank, 21, &req[2]);
+  /* pre_rank <- myrank */
+  update_position_edge_row(1, eta);
+  send(0, buf[3], buf_size[3], pre_rank, 21, &req[3]);
+
+  /* update position of inner rows */
+  update_position_inner_rows(eta);
+
+  /* pre_rank -> myrank */
+  accept(1, buf[0], &buf_size[0], &req[0], &stat[0]);
+
+  /* myrank <- next_rank */
+  accept(nrows - 2, buf[2], &buf_size[2], &req[2], &stat[2]);
+
+  MPI_Wait(&req[1], &stat[1]);
+  MPI_Wait(&req[3], &stat[3]);
+  for (int i = 0; i < 4; i++) {
+    delete[] buf[i];
+  }
+}
+
 /****************************************************************************/
 /*                   Static domain decomposition                            */
 /****************************************************************************/
-
-StaticDomain::StaticDomain(double Lx0, double Ly0, unsigned long long seed,
-                           double eta, double eps, double rho0):
-                           Lx(Lx0), Ly(Ly0) {
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
-  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
-  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
-
-  double dLy = Ly / tot_rank;
-  yl = myrank * dLy - 1;
-  yh = (myrank + 1) * dLy + 1;
-  ncols = int(Lx);
-  nrows = int(dLy) + 2;
-  int tot_cells = ncols * nrows;
-  cell = new Cell[tot_cells];
+StaticDomain::StaticDomain(double eta, double eps, double rho0,
+                           double Lx0, double Ly0, unsigned long long seed):
+                           BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
+  cell = new Cell[ncols * nrows];
   Cell::find_all_neighbor(cell, ncols, nrows);
-  myran = new Ran(seed + myrank);
-
-  if (myrank == 0) {
-    char fname[100];
-    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank);
-    fout_phi.open(fname);
-  }
-
-  cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
-  cout << "\tnext rank " << next_rank << endl;
-  cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
 }
 
 StaticDomain::~StaticDomain() {
   delete[] cell;
   delete[] particle;
-  fout_phi.close();
-}
-
-void StaticDomain::create_particle_random(int nPar) {
-  MAX_PAR = nPar * 2;
-  particle = new Node[MAX_PAR];
-  Node::ini_random(particle, nPar, myran, Lx, yl, yh);
-  create_cell_list(cell, ncols, yl, particle, end_pos);
-  MAX_BUF_SIZE = nPar / (nrows - 2) * 10 * 4;
-}
-
-void StaticDomain::create_from_snap(const string &filename) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
-                      Lx, Ly, tot_rank, myrank);
-  create_cell_list(cell, ncols, yl, particle, end_pos);
-  cout << "rank = " << myrank << "\tN = " << end_pos << endl;
-  MAX_BUF_SIZE = end_pos / (nrows - 2) * 10 * 4;
 }
 
 void StaticDomain::update_velocity() {
@@ -280,96 +293,29 @@ void StaticDomain::update_velocity() {
   MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE,
             pre_rank, 13, MPI_COMM_WORLD, &req[0]);
   /* myrank -> next_rank */
-  pack(nrows - 2, buf[1], buf_size[1],
-       cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE,
-            next_rank, 13, MPI_COMM_WORLD, &req[1]);
+  send(nrows - 2, buf[1], buf_size[1], next_rank, 13, &req[1]);
   /* myrank <- next_rank */
   MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE,
             next_rank, 31, MPI_COMM_WORLD, &req[2]);
   /* pre_rank <- myrank */
-  pack(1, buf[3], buf_size[3],
-       cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE,
-            pre_rank, 31, MPI_COMM_WORLD, &req[3]);
+  send(1, buf[3], buf_size[3], pre_rank, 31, &req[3]);
 
   for (int row = 1; row < nrows - 2; row++) {
     Cell::update_velocity_inner_row(cell + row * ncols, ncols, Lx);
   }
 
   /* pre_rank -> myrank */
-  MPI_Wait(&req[0], &stat[0]);
-  MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size[0]);
-  unpack(0, buf[0], buf_size[0],
-         cell, nrows, ncols, yl, particle, end_pos, empty_pos);
+  accept(0, buf[0], &buf_size[0], &req[0], &stat[0]);
   Cell::update_velocity_by_row(0, cell, ncols, Lx);
   Cell::clear_row(0, ncols, cell, empty_pos);
   /* myrank <- next_rank */
-  MPI_Wait(&req[2], &stat[2]);
-  MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size[2]);
-  unpack(nrows - 1, buf[2], buf_size[2],
-         cell, nrows, ncols, yl, particle, end_pos, empty_pos);
+  accept(nrows - 1, buf[2], &buf_size[2], &req[2], &stat[2]);
   Cell::update_velocity_by_row(nrows - 2, cell, ncols, Lx);
-  Cell::clear_row(nrows-1, ncols, cell, empty_pos);
+  Cell::clear_row(nrows - 1, ncols, cell, empty_pos);
 
   MPI_Wait(&req[1], &stat[1]);
   MPI_Wait(&req[3], &stat[3]);
 
-  for (int i = 0; i < 4; i++) {
-    delete[] buf[i];
-  }
-}
-
-void StaticDomain::update_position(double eta) {
-  MPI_Request req[4];
-  MPI_Status stat[4];
-  double *buf[4];
-  int buf_size[4];
-
-  for (int i = 0; i < 4; i++) {
-    buf[i] = new double[MAX_BUF_SIZE];
-    buf_size[i] = MAX_BUF_SIZE;
-  }
-
-  /* pre_rank -> myrank */
-  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE,
-            pre_rank, 12, MPI_COMM_WORLD, &req[0]);
-  /* myrank -> next_rank */
-  update_position_edge_row(nrows - 2, eta, myran, cell, ncols, nrows,
-                           Lx, yl, yh, MAX_BUF_SIZE);
-  pack(nrows - 1, buf[1], buf_size[1],
-       cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE,
-            next_rank, 12, MPI_COMM_WORLD, &req[1]);
-  /* myrank <- next_rank */
-  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE,
-            next_rank, 21, MPI_COMM_WORLD, &req[2]);
-  /* pre_rank <- myrank */
-  update_position_edge_row(1, eta, myran, cell, ncols, nrows,
-                           Lx, yl, yh, MAX_BUF_SIZE);
-  pack(0, buf[3], buf_size[3],
-       cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE,
-            pre_rank, 21, MPI_COMM_WORLD, &req[3]);
-
-  /* update position of inner rows */
-  update_position_inner_rows(eta, myran, particle, end_pos,
-                             cell, ncols, nrows, Lx, yl);
-
-  /* pre_rank -> myrank */
-  MPI_Wait(&req[0], &stat[0]);
-  MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size[0]);
-  unpack(1, buf[0], buf_size[0], cell, nrows, ncols, yl,
-         particle, end_pos, empty_pos);
-
-  /* myrank <- next_rank */
-  MPI_Wait(&req[2], &stat[2]);
-  MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size[2]);
-  unpack(nrows - 2, buf[2], buf_size[2], cell, nrows, ncols, yl,
-         particle, end_pos, empty_pos);
-
-  MPI_Wait(&req[1], &stat[1]);
-  MPI_Wait(&req[3], &stat[3]);
   for (int i = 0; i < 4; i++) {
     delete[] buf[i];
   }
@@ -381,101 +327,29 @@ void StaticDomain::one_step(double eta, int t) {
   output(t);
 }
 
-void StaticDomain::output(int t) {
-  if (t % 100 == 0) {
-    double sv[2];
-    int sub_N;
-    sum_velocity(particle, end_pos, sub_N, sv[0], sv[1]);
-    double tot_v[2];
-    int *num = new int[tot_rank];
-    MPI_Gather(&sub_N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    if (myrank == 0) {
-      int totN = 0;
-      double sum_N2 = 0;
-      for (int i = 0; i < tot_rank; i++) {
-        totN += num[i];
-        sum_N2 += num[i] * num[i];
-      }
-      double mean_N = totN / tot_rank;
-      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / totN;
-      double theta = atan2(tot_v[1], tot_v[0]);
-      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << totN;
-      for (int i = 0; i < tot_rank; i++) {
-        fout_phi << "\t" << num[i] - totN / tot_rank;
-      }
-      fout_phi << endl;
-    }
-    delete[] num;
-  }
-}
-
 /****************************************************************************/
 /*                   Dynamic domain decomposition                           */
 /****************************************************************************/
 
-DynamicDomain::DynamicDomain(double Lx0, double Ly0, unsigned long long seed,
-                             double eta, double eps, double rho0): 
-                             Lx(Lx0), Ly(Ly0){
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
-  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
-  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
-
-  double dLy = Ly / tot_rank;
-  yl = myrank * dLy - 1;
-  yh = (myrank + 1) * dLy + 1;
-  ncols = int(Lx);
-  nrows = int(dLy) + 2;
+DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
+                             double Lx0, double Ly0, unsigned long long seed):
+                             BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
+  CELL_BUF_SIZE = ncols * (nrows - 2) * 3;
+  cell_buf = new Cell[CELL_BUF_SIZE];
   int first_row = nrows - 2;
-  MAX_CELL = ncols * (nrows -2) * 3;
-  cell_buf = new Cell[MAX_CELL];
   cell = cell_buf + first_row * ncols;
   Cell::find_all_neighbor(cell, ncols, nrows);
   row_offset[0] = row_offset[1] = 0;
-  myran = new Ran(seed + myrank);
-
-  cout << "subdomain " << myrank << " of " << tot_rank << "\tpre rank " << pre_rank;
-  cout << "\tnext rank " << next_rank << endl;
-  cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
-
-  if (myrank == 0) {
-    char fname[100];
-    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
-      eta, eps, rho0, Lx, Ly, seed, tot_rank);
-    fout_phi.open(fname);
-  }
 }
 
 DynamicDomain::~DynamicDomain() {
   delete[] cell_buf;
   delete[] particle;
-  fout_phi.close();
 }
 
-void DynamicDomain::create_particle_random(int nPar) {
-  MAX_PAR = nPar * 2;
-  particle = new Node[MAX_PAR];
-  end_pos = nPar;
-  Node::ini_random(particle, nPar, myran, Lx, yl, yh);
-  create_cell_list(cell, ncols, yl, particle, end_pos);
-  nPar_per_row = nPar / (nrows - 2);
-  nPar_per_task = nPar;
-  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
-}
-
-void DynamicDomain::create_from_snap(const string &filename) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
-                      Lx, Ly, tot_rank, myrank);
-  create_cell_list(cell, ncols, yl, particle, end_pos);
-  nPar_per_row = end_pos / (nrows - 2);
-  nPar_per_task = end_pos;
-  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
-}
-
-void DynamicDomain::rearrange(int t) {
+void DynamicDomain::rearrange_domain(int t) {
   int my_nPar[3];
-  get_count_par_num(cell, ncols, nrows, my_nPar);
+  Cell::get_nPar(cell, ncols, nrows, my_nPar);
   int *recvbuf = new int[tot_rank * 3];
   int *sendbuf = new int[tot_rank * 2];
 
@@ -504,14 +378,6 @@ void DynamicDomain::rearrange(int t) {
         }
       }
     }
-    //if (t % 10 == 0 || t > 178) {
-    //  int sum = 0;
-    //  for (int i = 0; i < tot_rank; i++)
-    //    sum += recvbuf[i * 3 + 1];
-    //  cout << "t = " << t << "\t" << sendbuf[0] << "\t" << sendbuf[1]
-    //    << "\t" << sendbuf[2] << "\t" << sendbuf[3] << "\t" << sendbuf[4]
-    //    << "\t" << sendbuf[5] << "\t" << sum << endl;
-    //}
   }
   MPI_Scatter(sendbuf, 2, MPI_INT, row_offset, 2, MPI_INT, 0, MPI_COMM_WORLD);
   delete[] recvbuf;
@@ -534,34 +400,22 @@ void DynamicDomain::update_velocity() {
     int i = 0;
     /* pre_rank -> myrank */
     for (int j = 0; j <= row_offset[0]; j++) {
-      int tag = 12 + j;
-      MPI_Irecv(buf[i], buf_size[i], MPI_DOUBLE,
-                pre_rank, tag, MPI_COMM_WORLD, &req[i]);
+      recv(buf[i], buf_size[i], pre_rank, 12 + j, &req[i]);
       i++;
     }
     /* myrank -> next_rank */
     for (int j = 0; j >= row_offset[1]; j--) {
-      int tag = 12 - j;
-      pack(nrows - 2 + j, buf[i], buf_size[i],
-           cell, nrows, ncols, Ly, myrank, tot_rank);
-      MPI_Isend(buf[i], buf_size[i], MPI_DOUBLE,
-                next_rank, tag, MPI_COMM_WORLD, &req[i]);
+      send(nrows - 2 + j, buf[i], buf_size[i], next_rank, 12 - j, &req[i]);
       i++;
     }
     /* myrank <- next_rank */
     for (int j = 0; j <= row_offset[1]; j++) {
-      int tag = 21 + j * 10;
-      MPI_Irecv(buf[i], MAX_BUF_SIZE, MPI_DOUBLE,
-                next_rank, tag, MPI_COMM_WORLD, &req[i]);
+      recv(buf[i], buf_size[i], next_rank, 21 + j * 10, &req[i]);
       i++;
     }
     /* pre_rank <- myrank */
     for (int j = 0; j >= row_offset[0]; j--) {
-      int tag = 21 - j * 10;
-      pack(1 - j, buf[i], buf_size[i],
-           cell, nrows, ncols, Ly, myrank, tot_rank);
-      MPI_Isend(buf[i], buf_size[i], MPI_DOUBLE,
-                pre_rank, tag, MPI_COMM_WORLD, &req[i]);
+      send(1 - j, buf[i], buf_size[i], pre_rank, 21 - j * 10, &req[i]);
       i++;
     }
   }
@@ -579,10 +433,7 @@ void DynamicDomain::update_velocity() {
     int i = 0;
     for (int j = 0; j <= row_offset[0]; j++) {
       int row = row_offset[0] == 0 ? 0 : 1 - j;
-      MPI_Wait(&req[i], &stat[i]);
-      MPI_Get_count(&stat[i], MPI_DOUBLE, &buf_size[i]);
-      unpack(row, buf[i], buf_size[i], cell, nrows, ncols, yl,
-        particle, end_pos, empty_pos);
+      accept(row, buf[i], &buf_size[i], &req[i], &stat[i]);
       Cell::update_velocity_by_row(row, cell, ncols, Lx);
       i++;
     }
@@ -592,10 +443,7 @@ void DynamicDomain::update_velocity() {
 
     for (int j = 0; j <= row_offset[1]; j++) {
       int row = row_offset[1] == 0 ? nrows - 1 : nrows - 2 + j;
-      MPI_Wait(&req[i], &stat[i]);
-      MPI_Get_count(&stat[i], MPI_DOUBLE, &buf_size[i]);
-      unpack(row, buf[i], buf_size[i], cell, nrows, ncols, yl,
-        particle, end_pos, empty_pos);
+      accept(row, buf[i], &buf_size[i], &req[i], &stat[i]);
       Cell::update_velocity_by_row(row - 1, cell, ncols, Lx);
       i++;
     }
@@ -609,98 +457,9 @@ void DynamicDomain::update_velocity() {
   }
 }
 
-void DynamicDomain::update_position(double eta) {
-  MPI_Request req[4];
-  MPI_Status stat[4];
-  double *buf[4];
-  int buf_size[4];
-
-  for (int i = 0; i < 4; i++) {
-    buf[i] = new double[MAX_BUF_SIZE];
-    buf_size[i] = MAX_BUF_SIZE;
-  }
-
-  /* pre_rank -> myrank */
-  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE,
-            pre_rank, 12, MPI_COMM_WORLD, &req[0]);
-  /* myrank -> next_rank */
-  update_position_edge_row(nrows - 2, eta, myran, cell, ncols, nrows,
-                            Lx, yl, yh, MAX_BUF_SIZE);
-  pack(nrows - 1, buf[1], buf_size[1],
-        cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE,
-            next_rank, 12, MPI_COMM_WORLD, &req[1]);
-  /* myrank <- next_rank */
-  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE,
-            next_rank, 21, MPI_COMM_WORLD, &req[2]);
-  /* pre_rank <- myrank */
-  update_position_edge_row(1, eta, myran, cell, ncols, nrows,
-                            Lx, yl, yh, MAX_BUF_SIZE);
-  pack(0, buf[3], buf_size[3],
-        cell, nrows, ncols, Ly, myrank, tot_rank);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE,
-            pre_rank, 21, MPI_COMM_WORLD, &req[3]);
-
-  /* update position of inner rows */
-  update_position_inner_rows(eta, myran, particle, end_pos,
-                             cell, ncols, nrows, Lx, yl);
-
-  /* pre_rank -> myrank */
-  MPI_Wait(&req[0], &stat[0]);
-  MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size[0]);
-  unpack(1, buf[0], buf_size[0], cell, nrows, ncols, yl,
-          particle, end_pos, empty_pos);
-
-  /* myrank <- next_rank */
-  MPI_Wait(&req[2], &stat[2]);
-  MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size[2]);
-  unpack(nrows - 2, buf[2], buf_size[2], cell, nrows, ncols, yl,
-          particle, end_pos, empty_pos);
-
-  MPI_Wait(&req[1], &stat[1]);
-  MPI_Wait(&req[3], &stat[3]);
-  for (int i = 0; i < 4; i++) {
-    delete[] buf[i];
-  }
-}
-
 void DynamicDomain::one_step(double eta, int t) {
-  //if (myrank == 0) {
-  //  row_offset[0] = 0;
-  //  row_offset[1] = -1;
-  //} else if (myrank == 1) {
-  //  row_offset[0] = 1;
-  //  row_offset[1] = 1;
-  //} else {
-  //  row_offset[0] = -1;
-  //  row_offset[1] = 0;
-  //}
+  rearrange_domain(t);
   update_velocity();
   update_position(eta);
   output(t);
-  rearrange(t);
-}
-
-void DynamicDomain::output(int t) {
-  if (t % 100 == 0) {
-    double sv[2];
-    int my_num;
-    sum_velocity(particle, end_pos, my_num, sv[0], sv[1]);
-    double tot_v[2];
-    int *num = new int[tot_rank];
-    MPI_Gather(&my_num, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    if (myrank == 0) {
-      int sum_num = 0;
-      for (int i = 0; i < tot_rank; i++) sum_num += num[i];
-      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / sum_num;
-      double theta = atan2(tot_v[1], tot_v[0]);
-      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << sum_num;
-      for (int i = 0; i < tot_rank; i++) {
-        fout_phi << "\t" << num[i] - sum_num / tot_rank;
-      }
-      fout_phi << endl;
-    }
-    delete[] num;
-  }
 }

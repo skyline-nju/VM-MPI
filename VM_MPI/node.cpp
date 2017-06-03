@@ -105,3 +105,27 @@ void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
   delete[] buf;
 }
 
+void Node::sum_v(const Node *par, int end_pos,
+                 int &npar, double & svx, double & svy) {
+  svx = 0;
+  svy = 0;
+  npar = 0;
+  for (int i = 0; i < end_pos; i++) {
+    if (!par[i].is_empty && !par[i].is_ghost) {
+      svx += par[i].vx;
+      svy += par[i].vy;
+      npar++;
+    }
+  }
+}
+
+int Node::get_nPar(const Node * par, int end_pos) {
+  int count = 0;
+  for (int i = 0; i < end_pos; i++) {
+    if (!par[i].is_empty && !par[i].is_ghost) {
+      count++;
+    }
+  }
+  return count;
+}
+

@@ -17,6 +17,9 @@ struct Node
   static void ini_from_snap(Node **par, int &npar, int &max_par_num,
                             const std::string &filename, double Lx, double Ly,
                             int tot_rank, int myrank);
+  static void sum_v(const Node *par, int end_pos,
+                    int &npar, double &svx, double &svy);
+  static int get_nPar(const Node *par, int end_pos);
 
   double x;
   double y;

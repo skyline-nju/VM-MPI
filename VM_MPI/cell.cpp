@@ -86,9 +86,33 @@ void Cell::resize(Cell **cell, int ncols, int &nrows,
   *cell = p;
 }
 
-/****************************************************************************/
-/*          Using cell list to speed up the calculation of interactions     */
-/****************************************************************************/
+int Cell::get_nPar(const Cell * cell, int ncols, int nrows) {
+  int count = 0;
+  for (int row = 1; row < nrows - 1; row++) {
+    int j = row * ncols;
+    for (int col = 0; col < ncols; col++) {
+      count += cell[col + j].size;
+    }
+  }
+  return count;
+}
+
+void Cell::get_nPar(const Cell * cell, int ncols, int nrows, int * count) {
+  count[0] = count[1] = count[2] = 0;
+  for (int col = 0; col < ncols; col++) {
+    count[0] += cell[col + ncols].size;
+  }
+  for (int row = 2; row < nrows - 2; row++) {
+    int j = row * ncols;
+    for (int col = 0; col < ncols; col++) {
+      count[1] += cell[col + j].size;
+    }
+  }
+  for (int col = 0, j = (nrows - 2) * ncols; col < ncols; col++) {
+    count[2] += cell[col + j].size;
+  }
+  count[1] += (count[0] + count[2]);
+}
 
 void Cell::interact() {
   Node *node1 = head;
@@ -195,11 +219,4 @@ void Cell::update_velocity_bottom_row(Cell *p, int ncols, double Lx) {
       p->interact(3, Lx, 0);
     }
   }
-}
-
-void Cell::update_velocity_by_row(int row, Cell *cell, int ncols, double Lx) {
-  if (row > 0)
-    update_velocity_inner_row(cell + row * ncols, ncols, Lx);
-  else
-    update_velocity_bottom_row(cell, ncols, Lx);
 }
