@@ -21,6 +21,16 @@ void sum_velocity(const Node *par, int end_pos,
   }
 }
 
+int get_count_par_num(const Node *par, int end_pos) {
+  int count = 0;
+  for (int i = 0; i < end_pos; i++) {
+    if (!par[i].is_empty && !par[i].is_ghost) {
+      count++;
+    }
+  }
+  return count;
+}
+
 int get_count_par_num(const Cell *cell, int ncols, int nrows) {
   int count = 0;
   for (int row = 1; row < nrows - 1; row++) {
@@ -108,6 +118,7 @@ void update_position_edge_row(int row, double eta, Ran *myran,
         } else {
           curNode->is_ghost = false;
         }
+        curNode->new_arrival = false;
         curNode = curNode->next;
       } while (curNode);
     }
@@ -462,7 +473,7 @@ void DynamicDomain::create_from_snap(const string &filename) {
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 }
 
-void DynamicDomain::rearrange() {
+void DynamicDomain::rearrange(int t) {
   int my_nPar[3];
   get_count_par_num(cell, ncols, nrows, my_nPar);
   int *recvbuf = new int[tot_rank * 3];
@@ -493,6 +504,14 @@ void DynamicDomain::rearrange() {
         }
       }
     }
+    //if (t % 10 == 0 || t > 178) {
+    //  int sum = 0;
+    //  for (int i = 0; i < tot_rank; i++)
+    //    sum += recvbuf[i * 3 + 1];
+    //  cout << "t = " << t << "\t" << sendbuf[0] << "\t" << sendbuf[1]
+    //    << "\t" << sendbuf[2] << "\t" << sendbuf[3] << "\t" << sendbuf[4]
+    //    << "\t" << sendbuf[5] << "\t" << sum << endl;
+    //}
   }
   MPI_Scatter(sendbuf, 2, MPI_INT, row_offset, 2, MPI_INT, 0, MPI_COMM_WORLD);
   delete[] recvbuf;
@@ -504,6 +523,7 @@ void DynamicDomain::update_velocity() {
   MPI_Status stat[4];
   double *buf[4];
   int buf_size[4];
+
 
   for (int i = 0; i < 4; i++) {
     buf[i] = new double[MAX_BUF_SIZE];
@@ -567,8 +587,9 @@ void DynamicDomain::update_velocity() {
       i++;
     }
     Cell::clear_row(0, ncols, cell, empty_pos);
-    if (row_offset[1] == 0)
-      i++;
+
+    for (int j = 0; j >= row_offset[1]; j--) i++;
+
     for (int j = 0; j <= row_offset[1]; j++) {
       int row = row_offset[1] == 0 ? nrows - 1 : nrows - 2 + j;
       MPI_Wait(&req[i], &stat[i]);
@@ -580,6 +601,7 @@ void DynamicDomain::update_velocity() {
     }
     Cell::clear_row(nrows - 1, ncols, cell, empty_pos);
   }
+
   MPI_Waitall(4, req, stat);
   for (int i = 0; i < 4; i++) {
     delete[] buf[i];
@@ -643,34 +665,39 @@ void DynamicDomain::update_position(double eta) {
 }
 
 void DynamicDomain::one_step(double eta, int t) {
+  //if (myrank == 0) {
+  //  row_offset[0] = 0;
+  //  row_offset[1] = -1;
+  //} else if (myrank == 1) {
+  //  row_offset[0] = 1;
+  //  row_offset[1] = 1;
+  //} else {
+  //  row_offset[0] = -1;
+  //  row_offset[1] = 0;
+  //}
   update_velocity();
   update_position(eta);
   output(t);
-  rearrange();
+  rearrange(t);
 }
 
 void DynamicDomain::output(int t) {
   if (t % 100 == 0) {
     double sv[2];
-    int sub_N;
-    sum_velocity(particle, end_pos, sub_N, sv[0], sv[1]);
+    int my_num;
+    sum_velocity(particle, end_pos, my_num, sv[0], sv[1]);
     double tot_v[2];
     int *num = new int[tot_rank];
-    MPI_Gather(&sub_N, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(&my_num, 1, MPI_INT, num, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Reduce(sv, tot_v, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     if (myrank == 0) {
-      int totN = 0;
-      double sum_N2 = 0;
-      for (int i = 0; i < tot_rank; i++) {
-        totN += num[i];
-        sum_N2 += num[i] * num[i];
-      }
-      double mean_N = totN / tot_rank;
-      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / totN;
+      int sum_num = 0;
+      for (int i = 0; i < tot_rank; i++) sum_num += num[i];
+      double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / sum_num;
       double theta = atan2(tot_v[1], tot_v[0]);
-      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << totN;
+      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << sum_num;
       for (int i = 0; i < tot_rank; i++) {
-        fout_phi << "\t" << num[i] - totN / tot_rank;
+        fout_phi << "\t" << num[i] - sum_num / tot_rank;
       }
       fout_phi << endl;
     }

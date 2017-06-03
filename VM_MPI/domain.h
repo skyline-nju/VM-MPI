@@ -52,7 +52,7 @@ public:
   ~DynamicDomain();
   void create_particle_random(int nPar);
   void create_from_snap(const std::string &filename);
-  void rearrange();
+  void rearrange(int t);
   void update_velocity();
   void update_position(double eta);
   void one_step(double eta, int t);

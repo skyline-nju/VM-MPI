@@ -75,13 +75,11 @@ void Cell::resize(Cell **cell, int ncols, int &nrows,
   if (offset[1] == -1) {
     clear_row(nrows - 1, ncols, p, empty_pos);
     nrows--;
-    for (int col = 0; col < ncols; col++)
-      find_neighbor(p, ncols, nrows, col, nrows - 2);
   } else if (offset[1] == 1) {
     nrows++;
-    for (int col = 0; col < ncols; col++) {
-      p[col].head = NULL;
-      p[col].size = 0;
+    for (int col = 0, j = (nrows - 1) * ncols; col < ncols; col++) {
+      p[col + j].head = NULL;
+      p[col + j].size = 0;
       find_neighbor(p, ncols, nrows, col, nrows - 2);
     }
   }
