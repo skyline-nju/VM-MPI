@@ -157,6 +157,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cell.h" />
+    <ClInclude Include="cmdline.h" />
     <ClInclude Include="comn.h" />
     <ClInclude Include="domain.h" />
     <ClInclude Include="node.h" />

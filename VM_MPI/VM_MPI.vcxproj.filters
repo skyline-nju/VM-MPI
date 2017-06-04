@@ -47,5 +47,8 @@
     <ClInclude Include="domain.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="cmdline.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

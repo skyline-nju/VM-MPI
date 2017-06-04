@@ -25,12 +25,6 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
   MAX_PAR = end_pos = MAX_BUF_SIZE = nPar_per_row = nPar_per_task = 0;
 
   myran = new Ran(seed + myrank);
-  if (myrank == 0) {
-    char fname[100];
-    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank);
-    fout_phi.open(fname);
-  }
 
   cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
   cout << "\tnext rank " << next_rank << endl;
@@ -38,13 +32,13 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
 }
 
 void BasicDomain::create_particle_random(int nPar, double multiple) {
-  MAX_PAR = int(nPar * multiple);
+  MAX_PAR = int(nPar / tot_rank * multiple);
   particle = new Node[MAX_PAR];
   end_pos = nPar;
   Node::ini_random(particle, nPar, myran, Lx, yl, yh);
   create_cell_list();
-  nPar_per_row = nPar / (nrows - 2);
-  nPar_per_task = nPar;
+  nPar_per_row = nPar / tot_rank / (nrows - 2);
+  nPar_per_task = nPar / tot_rank;
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 }
 
@@ -71,13 +65,47 @@ void BasicDomain::output(int t) {
       for (int i = 0; i < tot_rank; i++) sum_num += num[i];
       double phi = sqrt(tot_v[0] * tot_v[0] + tot_v[1] * tot_v[1]) / sum_num;
       double theta = atan2(tot_v[1], tot_v[0]);
-      fout_phi << t << "\t" << phi << "\t" << theta << "\t" << sum_num;
+      fout << t << "\t" << phi << "\t" << theta << "\t" << sum_num;
       for (int i = 0; i < tot_rank; i++) {
-        fout_phi << "\t" << num[i] - sum_num / tot_rank;
+        fout << "\t" << num[i] - sum_num / tot_rank;
       }
-      fout_phi << endl;
+      fout << endl;
     }
     delete[] num;
+    if (t % 10000 == 0 && myrank == 1) {
+      double dt = difftime(time(NULL), beg_time);
+      int hour = int(dt / 3600);
+      int min = int((dt - hour * 3600) / 60);
+      double sec = dt - hour * 3600 - min * 60;
+      fout << t << "\t" << hour << ":" << min << ":" << sec << endl;
+    }
+  }
+}
+
+void BasicDomain::ini_output(const string &type, double eta, double eps,
+                             double rho0 ,unsigned long long seed) {
+  if (myrank == 0) {
+    char fname[100];
+    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
+             eta, eps, rho0, Lx, Ly, seed, tot_rank, type.c_str());
+    fout.open(fname);
+  } else if (myrank == 1) {
+    char fname[100];
+    snprintf(fname, 100, "l_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
+             eta, eps, rho0, Lx, Ly, seed, tot_rank, type.c_str());
+    fout.open(fname);
+    time(&beg_time);
+    fout << "Started at " << asctime(localtime(&beg_time));
+    fout << "-------- Parameters --------\n";
+    fout << "eta: " << eta << endl;
+    fout << "epsilon: " << eps << endl;
+    fout << "density: " << rho0 << endl;
+    fout << "Lx: " << Lx << endl;
+    fout << "Ly: " << Ly << endl;
+    fout << "seed: " << seed << endl;
+    fout << "np: " << tot_rank << endl;
+    fout << "-------- Run --------\n";
+    fout << "time step\telapsed time\n";
   }
 }
 
@@ -259,6 +287,13 @@ void BasicDomain::update_position(double eta) {
   }
 }
 
+void BasicDomain::one_step(double eta, int t) {
+  rearrange_domain(t);
+  update_velocity();
+  update_position(eta);
+  output(t);
+}
+
 /****************************************************************************/
 /*                   Static domain decomposition                            */
 /****************************************************************************/
@@ -267,12 +302,20 @@ StaticDomain::StaticDomain(double eta, double eps, double rho0,
                            BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
   cell = new Cell[ncols * nrows];
   Cell::find_all_neighbor(cell, ncols, nrows);
+  ini_output("s", eta, eps, rho0, seed);
+
 }
 
 StaticDomain::~StaticDomain() {
   delete[] cell;
   delete[] particle;
-  fout_phi.close();
+  if (myrank == 0) {
+    fout.close();
+  } else if (myrank == 1) {
+    fout << "-------- End --------\n";
+    fout << "Finished at " << asctime(localtime(&beg_time));
+    fout.close();
+  }
 }
 
 void StaticDomain::update_velocity() {
@@ -317,12 +360,6 @@ void StaticDomain::update_velocity() {
   }
 }
 
-void StaticDomain::one_step(double eta, int t) {
-  update_velocity();
-  update_position(eta);
-  output(t);
-}
-
 /****************************************************************************/
 /*                   Dynamic domain decomposition                           */
 /****************************************************************************/
@@ -336,12 +373,19 @@ DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
   cell = cell_buf + first_row * ncols;
   Cell::find_all_neighbor(cell, ncols, nrows);
   row_offset[0] = row_offset[1] = 0;
+  ini_output("d", eta, eps, rho0, seed);
 }
 
 DynamicDomain::~DynamicDomain() {
   delete[] cell_buf;
   delete[] particle;
-  fout_phi.close();
+  if (myrank == 0) {
+    fout.close();
+  } else if (myrank == 1) {
+    fout << "-------- End --------\n";
+    fout << "Finished at " << asctime(localtime(&beg_time));
+    fout.close();
+  }
 }
 
 void DynamicDomain::rearrange_domain(int t) {
@@ -454,9 +498,3 @@ void DynamicDomain::update_velocity() {
   }
 }
 
-void DynamicDomain::one_step(double eta, int t) {
-  rearrange_domain(t);
-  update_velocity();
-  update_position(eta);
-  output(t);
-}
