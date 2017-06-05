@@ -48,4 +48,5 @@ inline void Cell::update_velocity_by_row(int row, Cell *cell, int ncols, double 
   else
     update_velocity_bottom_row(cell, ncols, Lx);
 }
+
 #endif

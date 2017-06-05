@@ -16,7 +16,7 @@ public:
   BasicDomain(double eta, double eps, double rho0,
               double Lx0, double Ly0, unsigned long long seed);
   virtual ~BasicDomain() {};
-  void create_particle_random(int nPar, double multiple);
+  void create_particle_random(int tot_nPar, double multiple);
   void create_from_snap(const std::string &filename);
   void output(int t);
   void ini_output(const std::string &type, double eta, double eps,
@@ -26,16 +26,15 @@ public:
   void update_position_inner_rows(double eta);
   void pack(int row, double *buf, int &buf_size);
   void unpack(int row, const double *buf, int buf_size);
-  void update_position(double eta);
   void send(int row, double *buf, int &buf_size, int dest, int tag,
             MPI_Request *req);
   void recv(double *buf, int buf_size, int source, int tag,
             MPI_Request *req);
   void accept(int row, double *buf, int *buf_size,
               MPI_Request *req, MPI_Status *stat);
-  void one_step(double eta, int t);
-  virtual void update_velocity() = 0;
-  virtual void rearrange_domain(int t) = 0;
+  void update_position(double eta);
+  void update_velocity();
+  virtual void one_step(double eta, int t) = 0;
 
 protected:
   int tot_rank;
@@ -53,6 +52,7 @@ protected:
   int nrows;
 
   Node *particle;
+  int my_nPar;
   int MAX_PAR;
   int end_pos;
   int nPar_per_row;
@@ -73,26 +73,28 @@ public:
   StaticDomain(double eta, double eps, double rho0,
                double Lx0, double Ly0, unsigned long long seed);
   ~StaticDomain();
-  void rearrange_domain(int t) {};
-  void update_velocity();
+  void one_step(double eta, int t);
 };
 
 class DynamicDomain : public BasicDomain
 {
 public:
   DynamicDomain(double eta, double eps, double rho0,
-                double Lx0, double Ly0, unsigned long long seed);
+                double Lx0, double Ly0, unsigned long long seed,
+                int refresh_rate0);
   ~DynamicDomain();
 
-  void rearrange_domain(int t);       /* update row_offset */
-  void update_velocity();
+  void global_rearrange(int t);       /* update row_offset */
+  void local_rearrange(int t);
+  void update_velocity_dynamic();
+  void one_step(double eta, int t);
 
 private:
   Cell *cell_buf;     // The size of cell_buf is larger than the size of
   int CELL_BUF_SIZE;  // cell, so that there is enough space for cell to
                       // expand or shrink.
                       
-
+  int refresh_rate;
   int row_offset[2];  // Control the size of subdomain. row_offset[0] = 1
                       // means the bottom boundary of the subdomain moves
                       // downward by 1, while row_offset[1] = 1 means the
@@ -109,6 +111,7 @@ inline void BasicDomain::recv(double *buf, int buf_size, int source,
                               int tag, MPI_Request *req) {
   MPI_Irecv(buf, buf_size, MPI_DOUBLE, source, tag, MPI_COMM_WORLD, req);
 }
+
 
 inline void BasicDomain::accept(int row, double *buf, int *buf_size,
                                 MPI_Request *req, MPI_Status *stat) {

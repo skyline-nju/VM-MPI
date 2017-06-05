@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
   cmd.add<unsigned long long int>("seed", 's', "seed of random number", true);
   cmd.add<string>("fin", 'f', "input snapshot", false, "");
   cmd.add("dynamic", '\0', "dynamic domain decomposition");
+  cmd.add<int>("rate", '\0', "refresh rate of domain", false, 1);
   cmd.parse_check(argc, argv);
 
   double eta = cmd.get<double>("eta");
@@ -26,11 +27,12 @@ int main(int argc, char *argv[]) {
   double Ly = cmd.get<double>("Ly");
   unsigned long long seed = cmd.get<unsigned long long>("seed");
   int nStep = cmd.get<int>("nstep");
+  int rate = cmd.get<int>("rate");
 
   MPI_Init(&argc, &argv);
   BasicDomain *subdomain;
   if (cmd.exist("dynamic"))
-    subdomain = new DynamicDomain(eta, eps, rho0, Lx, Ly, seed);
+    subdomain = new DynamicDomain(eta, eps, rho0, Lx, Ly, seed, rate);
   else
     subdomain = new StaticDomain(eta, eps, rho0, Lx, Ly, seed);
   if (cmd.exist("fin"))
