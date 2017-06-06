@@ -30,9 +30,11 @@ public:
                      const int *offset, std::stack<Node *> &empty_pos);
   static int get_nPar(const Cell *cell, int ncols, int nrows);
   static void get_nPar(const Cell *cell, int ncols, int nrows, int *count);
+
  
   Node* head;
   int size;
+  double disorder;
   Cell *neighbor[4];    // right, upper left, upper, upper right
 };
 

@@ -26,6 +26,10 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
   MAX_PAR = end_pos = MAX_BUF_SIZE = nPar_per_row = nPar_per_task = 0;
 
   myran = new Ran(seed + myrank);
+  if (eps > 0)
+    disorder_free = false;
+  else
+    disorder_free = true;
 
   cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
   cout << "\tnext rank " << next_rank << endl;
@@ -119,6 +123,13 @@ void BasicDomain::create_cell_list() {
   }
 }
 
+void BasicDomain::ini_disorder(double eps, double *disorder, int n) {
+  double d = 1.0 / (n - 1);
+  for (int i = 0; i < n; i++)
+    disorder[i] = (-0.5 + i * d) * eps * 2.0 * PI;
+  shuffle(disorder, n, myran);
+}
+
 void BasicDomain::update_position_edge_row(int row, double eta) {
   if (row != 1 && row != nrows - 2) {
     cout << "Error, row = " << row << " should be equal to "
@@ -133,6 +144,9 @@ void BasicDomain::update_position_edge_row(int row, double eta) {
       Node *curNode = cell[i].head;
       do {
         double noise = eta * 2 * PI * (myran->doub() - 0.5);
+        if (!disorder_free) {
+          noise += cell[curNode->cell_idx(yl, ncols)].disorder;
+        }
         curNode->update_coor(noise, Lx, yl);
         if (curNode->y < yl + 1 || curNode->y >= yh - 1) {
           curNode->is_ghost = true;
@@ -164,6 +178,9 @@ void BasicDomain::update_position_inner_rows(double eta) {
     if (!particle[i].is_empty) {
       if (!particle[i].is_moved) {
         double noise = eta * 2.0 * PI * (myran->doub() - 0.5);
+        if (!disorder_free) {
+          noise += cell[particle[i].cell_idx(yl, ncols)].disorder;
+        }
         particle[i].update_coor(noise, Lx, yl);
         particle[i].is_ghost = false;
       }
@@ -380,9 +397,9 @@ void BasicDomain::update_position(double eta) {
 StaticDomain::StaticDomain(double eta, double eps, double rho0,
                            double Lx0, double Ly0, unsigned long long seed):
                            BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
-  cell = new Cell[ncols * nrows];
-  Cell::find_all_neighbor(cell, ncols, nrows);
+  set_cell_list(eps);
   ini_output("s", eta, eps, rho0, seed);
+  
 
 }
 
@@ -395,6 +412,43 @@ StaticDomain::~StaticDomain() {
     fout << "-------- End --------\n";
     fout << "Finished at " << asctime(localtime(&beg_time));
     fout.close();
+  }
+}
+
+void StaticDomain::set_cell_list(double eps) {
+  cell = new Cell[ncols * nrows];
+  Cell::find_all_neighbor(cell, ncols, nrows);
+  if (eps > 0) {
+    int my_n = ncols * (nrows - 2);
+    int n = my_n * tot_rank;
+    double *my_disorder = new double[my_n];
+    double *disorder = new double[n];
+    if (myrank == 0) {
+      ini_disorder(eps, disorder, n);
+    }
+    MPI_Scatter(disorder, my_n, MPI_DOUBLE,
+                my_disorder, my_n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    for (int row = 1; row < nrows - 1; row++) {
+      for (int col = 0; col < ncols; col++) {
+        int i = col + row * ncols;
+        int j = col + (row - 1) * ncols;
+        cell[i].disorder = my_disorder[j];
+      }
+    }
+    delete[] disorder;
+    delete[] my_disorder;
+  }
+  double sum = 0;
+  for (int row = 1; row < nrows - 1; row++) {
+    for (int col = 0; col < ncols; col++) {
+      int i = col + row * ncols;
+      sum += cell[i].disorder;
+    }
+  }
+  double tot_sum = 0;
+  MPI_Reduce(&sum, &tot_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  if (myrank == 0) {
+    cout << "sum disorder = " << tot_sum << endl;
   }
 }
 
@@ -412,21 +466,7 @@ DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
                              double Lx0, double Ly0, unsigned long long seed,
                              int refresh_rate0):
                              BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
-  int row_excess = (nrows - 2) / 2;
-  if (myrank == 0) {
-    CELL_BUF_SIZE = ncols * (nrows + row_excess);
-    cell_buf = new Cell[CELL_BUF_SIZE];
-    cell = cell_buf;
-  } else if (myrank == nrows - 1) {
-    CELL_BUF_SIZE = ncols * (nrows + row_excess);
-    cell_buf = new Cell[CELL_BUF_SIZE];
-    cell = cell_buf + row_excess * ncols;
-  } else {
-    CELL_BUF_SIZE = ncols * (nrows + 2 * row_excess);
-    cell_buf = new Cell[CELL_BUF_SIZE];
-    cell = cell_buf + row_excess * ncols;
-  }
-  Cell::find_all_neighbor(cell, ncols, nrows);
+  set_cell_list(eps);
   row_offset[0] = row_offset[1] = 0;
   refresh_rate = refresh_rate0;
   char buf[10];
@@ -443,6 +483,84 @@ DynamicDomain::~DynamicDomain() {
     fout << "-------- End --------\n";
     fout << "Finished at " << asctime(localtime(&beg_time));
     fout.close();
+  }
+}
+
+void DynamicDomain::set_cell_list(double eps) {
+  int row_excess = (nrows - 2) / 2;
+  int row_beg, row_end;
+  if (myrank == 0) {
+    MAX_ROW = nrows + row_excess;
+    CELL_BUF_SIZE = ncols * MAX_ROW;
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf;
+    row_beg = -1;
+    row_end = MAX_ROW - 1;
+  } else if (myrank == tot_rank - 1) {
+    MAX_ROW = nrows + row_excess;
+    CELL_BUF_SIZE = ncols * MAX_ROW;
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf + row_excess * ncols;
+
+    row_end = (nrows - 2) * tot_rank;
+  } else {
+    MAX_ROW = nrows + 2 * row_excess;
+    CELL_BUF_SIZE = ncols * MAX_ROW;
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf + row_excess * ncols;
+  }
+  Cell::find_all_neighbor(cell, ncols, nrows);
+
+  if (eps > 0) {
+    int tot_cell = ncols * (nrows - 2) * tot_rank;
+    double *disorder = new double[tot_cell];
+    if (myrank == 0) {
+      ini_disorder(eps, disorder, tot_cell);
+      double sum = 0;
+      for (int i = 0; i < tot_cell; i++)
+        sum += disorder[i];
+      cout << "sum of disorder = " << sum << endl;
+    }
+    MPI_Bcast(disorder, tot_cell, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    if (myrank == 0) {
+      for (int row = 1; row < MAX_ROW; row++) {
+        for (int col = 0; col < ncols; col++) {
+          int i = col + row * ncols;
+          int j = col + (row - 1) * ncols;
+          cell_buf[i].disorder = disorder[j];
+        }
+      }
+    } else if (myrank < tot_rank - 1){
+      for (int row = 0; row < MAX_ROW; row++) {
+        for (int col = 0; col < ncols; col++) {
+          int i = col + row * ncols;
+          int j = col + ((nrows - 2) * myrank - 1 - row_excess + row ) * ncols;
+          cell_buf[i].disorder = disorder[j];
+        }
+      }
+    } else {
+      for (int row = 0; row < MAX_ROW - 1; row++) {
+        for (int col = 0; col < ncols; col++) {
+          int i = col + row * ncols;
+          int j = col + ((nrows - 2) * myrank - 1 - row_excess + row) * ncols;
+          cell_buf[i].disorder = disorder[j];
+        }
+      }
+    }
+    delete[] disorder;
+  }
+  {
+    double sum = 0;
+    for (int row = 1; row < nrows - 1; row++) {
+      for (int col = 0; col < ncols; col++) {
+        int i = col + row * ncols;
+        sum += cell[i].disorder;
+      }
+    }
+    double tot_sum;
+    MPI_Reduce(&sum, &tot_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myrank == 0)
+      cout << "sum of disorder = " << tot_sum << endl;
   }
 }
 
@@ -512,7 +630,6 @@ void DynamicDomain::local_rearrange(int t) {
 }
 
 void DynamicDomain::update_velocity_dynamic() {
-
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];

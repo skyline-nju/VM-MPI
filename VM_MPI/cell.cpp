@@ -4,6 +4,7 @@ using namespace std;
 Cell::Cell() {
   head = NULL;
   size = 0;
+  disorder = 0;
   for (int i = 0; i < 4; i++) {
     neighbor[i] = NULL;
   }

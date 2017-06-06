@@ -22,6 +22,7 @@ public:
   void ini_output(const std::string &type, double eta, double eps,
                   double rho0, unsigned long long seed);
   void create_cell_list();
+  void ini_disorder(double eps, double *disorder, int n);
   void update_position_edge_row(int row, double eta);
   void update_position_inner_rows(double eta);
   void pack(int row, double *buf, int &buf_size);
@@ -32,6 +33,7 @@ public:
             MPI_Request *req);
   void accept(int row, double *buf, int *buf_size,
               MPI_Request *req, MPI_Status *stat);
+  double get_noise(double eta);
   void update_position(double eta);
   void update_velocity();
   void shift_boundary(int pre_nPar, int next_nPar, int *offset);
@@ -62,6 +64,7 @@ protected:
 
   int MAX_BUF_SIZE;
   Ran *myran;
+  bool disorder_free;
 
   std::time_t beg_time;
   std::ofstream fout;
@@ -74,6 +77,7 @@ public:
   StaticDomain(double eta, double eps, double rho0,
                double Lx0, double Ly0, unsigned long long seed);
   ~StaticDomain();
+  void set_cell_list(double eps);
   void one_step(double eta, int t);
 };
 
@@ -85,6 +89,7 @@ public:
                 int refresh_rate0);
   ~DynamicDomain();
 
+  void set_cell_list(double eps);
   void global_rearrange(int t);       /* update row_offset */
   void local_rearrange(int t);
   void update_velocity_dynamic();
@@ -93,7 +98,7 @@ public:
 private:
   Cell *cell_buf;     // The size of cell_buf is larger than the size of
   int CELL_BUF_SIZE;  // cell, so that there is enough space for cell to
-                      // expand or shrink.
+  int MAX_ROW;        // expand or shrink.
                       
   int refresh_rate;
   int row_offset[2];  // Control the size of subdomain. row_offset[0] = 1
@@ -102,6 +107,9 @@ private:
                       // top boundary moves upward by 1.
 };
 
+inline double BasicDomain::get_noise(double eta) {
+  return eta * 2.0 * PI * (myran->doub() - 0.5);
+}
 inline void BasicDomain::send(int row, double *buf, int &buf_size, int dest,
   int tag, MPI_Request *req) {
   pack(row, buf, buf_size);
