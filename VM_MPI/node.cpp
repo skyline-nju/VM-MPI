@@ -51,8 +51,8 @@ void Node::ini_random(Node * par, int nPar, Ran * myran,
 }
 
 void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
-                         const std::string &filename, double Lx, double Ly,
-                         int tot_rank, int myrank) {
+                         double magnification, const std::string &filename,
+                         double Lx, double Ly, int tot_rank, int myrank) {
   MPI_File fin;
   if (!exist(filename.c_str())) {
     cout << "Error, " << filename << " doesn't exist!\n";
@@ -81,7 +81,7 @@ void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
   }
   int npar_in = size_buf / 3;
   npar = npar_in * nx * ny;
-  max_par_num = npar * 3;
+  max_par_num = int(npar * magnification);
   int idx = 0;
   Node *particle = new Node[max_par_num];
   for (int row = 0; row < ny; row++) {

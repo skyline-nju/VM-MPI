@@ -32,9 +32,9 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
   cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
 }
 
-void BasicDomain::create_particle_random(int tot_nPar, double multiple) {
+void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
   my_nPar = tot_nPar / tot_rank;
-  MAX_PAR = int(my_nPar * multiple);
+  MAX_PAR = int(my_nPar * magnification);
   particle = new Node[MAX_PAR];
   end_pos = my_nPar;
   Node::ini_random(particle, my_nPar, myran, Lx, yl, yh);
@@ -44,8 +44,9 @@ void BasicDomain::create_particle_random(int tot_nPar, double multiple) {
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 }
 
-void BasicDomain::create_from_snap(const string & filename) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR, filename,
+void BasicDomain::create_from_snap(const string & filename,
+                                   double magnification) {
+  Node::ini_from_snap(&particle, end_pos, MAX_PAR, magnification, filename,
                       Lx, Ly, tot_rank, myrank);
   create_cell_list();
   nPar_per_row = end_pos / (nrows - 2);
@@ -294,6 +295,47 @@ void BasicDomain::update_velocity() {
   }
 
 }
+void BasicDomain::shift_boundary(int pre_nPar, int next_nPar, int * offset) {
+  int threshold = 2 * nPar_per_row;
+  if (myrank == 0) {
+    offset[0] = 0;
+    int dn = next_nPar - my_nPar;
+    if (dn > threshold) {
+      offset[1] = 1;
+    } else if (dn < -threshold) {
+      offset[1] = -1;
+    } else {
+      offset[1] = 0;
+    }
+  } else if (myrank == tot_rank - 1) {
+    offset[1] = 0;
+    int dn = pre_nPar - my_nPar;
+    if (dn > threshold) {
+      offset[0] = 1;
+    } else if (dn < -threshold) {
+      offset[0] = -1;
+    } else {
+      offset[0] = 0;
+    }
+  } else {
+    int dn = pre_nPar - my_nPar;
+    if (dn > threshold) {
+      offset[0] = 1;
+    } else if (dn < -threshold) {
+      offset[0] = -1;
+    } else {
+      offset[0] = 0;
+    }
+    dn = next_nPar - my_nPar;
+    if (dn > threshold) {
+      offset[1] = 1;
+    } else if (dn < -threshold) {
+      offset[1] = -1;
+    } else {
+      offset[1] = 0;
+    }
+  }
+}
 void BasicDomain::update_position(double eta) {
   MPI_Request req[4];
   MPI_Status stat[4];
@@ -370,10 +412,20 @@ DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
                              double Lx0, double Ly0, unsigned long long seed,
                              int refresh_rate0):
                              BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
-  CELL_BUF_SIZE = ncols * (nrows - 2) * 3;
-  cell_buf = new Cell[CELL_BUF_SIZE];
-  int first_row = nrows - 2;
-  cell = cell_buf + first_row * ncols;
+  int row_excess = (nrows - 2) / 2;
+  if (myrank == 0) {
+    CELL_BUF_SIZE = ncols * (nrows + row_excess);
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf;
+  } else if (myrank == nrows - 1) {
+    CELL_BUF_SIZE = ncols * (nrows + row_excess);
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf + row_excess * ncols;
+  } else {
+    CELL_BUF_SIZE = ncols * (nrows + 2 * row_excess);
+    cell_buf = new Cell[CELL_BUF_SIZE];
+    cell = cell_buf + row_excess * ncols;
+  }
   Cell::find_all_neighbor(cell, ncols, nrows);
   row_offset[0] = row_offset[1] = 0;
   refresh_rate = refresh_rate0;
@@ -455,54 +507,16 @@ void DynamicDomain::local_rearrange(int t) {
     MPI_Sendrecv(&my_nPar, 1, MPI_INT, pre_id, 54,
                  &next_nPar, 1, MPI_INT, next_id, 54,
                  MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
-    int threshold = 2 * nPar_per_row;
-    if (myrank == 0) {
-      row_offset[0] = 0;
-      int dn = next_nPar - my_nPar;
-      if (dn > threshold) {
-        row_offset[1] = 1;
-      } else if (dn < -threshold) {
-        row_offset[1] = -1;
-      } else {
-        row_offset[1] = 0;
-      }
-    } else if (myrank == tot_rank - 1) {
-      row_offset[1] = 0;
-      int dn = pre_nPar - my_nPar;
-      if (dn > threshold) {
-        row_offset[0] = 1;
-      } else if (dn < -threshold) {
-        row_offset[0] = -1;
-      } else {
-        row_offset[0] = 0;
-      }
-    } else {
-      int dn = pre_nPar - my_nPar;
-      if (dn > threshold) {
-        row_offset[0] = 1;
-      } else if (dn < -threshold) {
-        row_offset[0] = -1;
-      } else {
-        row_offset[0] = 0;
-      }
-      dn = next_nPar - my_nPar;
-      if (dn > threshold) {
-        row_offset[1] = 1;
-      } else if (dn < -threshold) {
-        row_offset[1] = -1;
-      } else {
-        row_offset[1] = 0;
-      }
-    }
+    shift_boundary(pre_nPar, next_nPar, row_offset); 
   }
 }
 
 void DynamicDomain::update_velocity_dynamic() {
+
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];
   int buf_size[4];
-
 
   for (int i = 0; i < 4; i++) {
     buf[i] = new double[MAX_BUF_SIZE];
@@ -532,6 +546,7 @@ void DynamicDomain::update_velocity_dynamic() {
       i++;
     }
   }
+
   /* update velocity for inner rows */
   for (int row = 1; row < nrows - 2; row++)
     Cell::update_velocity_inner_row(cell + row * ncols, ncols, Lx);
@@ -563,7 +578,7 @@ void DynamicDomain::update_velocity_dynamic() {
     Cell::clear_row(nrows - 1, ncols, cell, empty_pos);
   }
 
-  MPI_Waitall(4, req, stat);
+  MPI_Waitall(4, req, MPI_STATUSES_IGNORE);
   for (int i = 0; i < 4; i++) {
     delete[] buf[i];
     buf[i] = NULL;

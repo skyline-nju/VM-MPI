@@ -31,14 +31,19 @@ int main(int argc, char *argv[]) {
 
   MPI_Init(&argc, &argv);
   BasicDomain *subdomain;
-  if (cmd.exist("dynamic"))
+  double magnification;
+  if (cmd.exist("dynamic")) {
     subdomain = new DynamicDomain(eta, eps, rho0, Lx, Ly, seed, rate);
-  else
+    magnification = 1.5;
+  }
+  else {
     subdomain = new StaticDomain(eta, eps, rho0, Lx, Ly, seed);
+    magnification = 3.0;
+  }
   if (cmd.exist("fin"))
-    subdomain->create_from_snap(cmd.get<string>("fin"));
+    subdomain->create_from_snap(cmd.get<string>("fin"), magnification);
   else
-    subdomain->create_particle_random(int(Lx * Ly * rho0), 3);
+    subdomain->create_particle_random(int(Lx * Ly * rho0), magnification);
 
   for (int i = 1; i <= nStep; i++) {
     subdomain->one_step(eta, i);

@@ -17,7 +17,7 @@ public:
               double Lx0, double Ly0, unsigned long long seed);
   virtual ~BasicDomain() {};
   void create_particle_random(int tot_nPar, double multiple);
-  void create_from_snap(const std::string &filename);
+  void create_from_snap(const std::string &filename, double magnification);
   void output(int t);
   void ini_output(const std::string &type, double eta, double eps,
                   double rho0, unsigned long long seed);
@@ -34,6 +34,7 @@ public:
               MPI_Request *req, MPI_Status *stat);
   void update_position(double eta);
   void update_velocity();
+  void shift_boundary(int pre_nPar, int next_nPar, int *offset);
   virtual void one_step(double eta, int t) = 0;
 
 protected:
@@ -102,22 +103,21 @@ private:
 };
 
 inline void BasicDomain::send(int row, double *buf, int &buf_size, int dest,
-                              int tag, MPI_Request *req) {
+  int tag, MPI_Request *req) {
   pack(row, buf, buf_size);
   MPI_Isend(buf, buf_size, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, req);
 }
 
 inline void BasicDomain::recv(double *buf, int buf_size, int source,
-                              int tag, MPI_Request *req) {
+  int tag, MPI_Request *req) {
   MPI_Irecv(buf, buf_size, MPI_DOUBLE, source, tag, MPI_COMM_WORLD, req);
 }
 
 
 inline void BasicDomain::accept(int row, double *buf, int *buf_size,
-                                MPI_Request *req, MPI_Status *stat) {
+  MPI_Request *req, MPI_Status *stat) {
   MPI_Wait(req, stat);
   MPI_Get_count(stat, MPI_DOUBLE, buf_size);
   unpack(row, buf, *buf_size);
 }
-
 #endif
