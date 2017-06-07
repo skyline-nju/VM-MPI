@@ -30,10 +30,41 @@ BasicDomain::BasicDomain(double eta, double eps, double rho0,
     disorder_free = false;
   else
     disorder_free = true;
+  cgs = NULL;
 
   cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
   cout << "\tnext rank " << next_rank << endl;
   cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
+}
+
+BasicDomain::BasicDomain(const cmdline::parser &cmd) {
+  eta = cmd.get<double>("eta");
+  eps = cmd.get<double>("eps");
+  rho0 = cmd.get<double>("eps");
+  Lx = cmd.get<double>("Lx");
+  Ly = cmd.get<double>("Ly");
+  tot_steps = cmd.get<int>("nstep");
+  unsigned long long seed = cmd.get<unsigned long long>("seed");
+
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
+  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
+
+  double dLy = Ly / tot_rank;
+  yl = myrank * dLy - 1;
+  yh = (myrank + 1) * dLy + 1;
+  ncols = int(Lx);
+  nrows = int(dLy) + 2;
+  cell = NULL;
+
+  particle = NULL;
+  my_nPar = 0;
+  MAX_PAR = end_pos = MAX_BUF_SIZE = nPar_per_row = nPar_per_task = 0;
+
+  myran = new Ran(seed + myrank);
+  disorder_free = eps > 0 ? false : true;
+  cgs = NULL;
 }
 
 void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
@@ -46,6 +77,12 @@ void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
   nPar_per_row = my_nPar / (nrows - 2);
   nPar_per_task = my_nPar;
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
+
+  if (myrank == 1) {
+    fout << "create particles randomly " << endl;
+    fout << "-------- Run --------\n";
+    fout << "time step\telapsed time\n";
+  }
 }
 
 void BasicDomain::create_from_snap(const string & filename,
@@ -56,9 +93,47 @@ void BasicDomain::create_from_snap(const string & filename,
   nPar_per_row = end_pos / (nrows - 2);
   my_nPar = nPar_per_task = end_pos;
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
+
+  if (myrank == 1) {
+    fout << "create particles by copying the snapshot: " << filename << endl;
+    fout << "-------- Run --------\n";
+    fout << "time step\telapsed time\n";
+  }
+}
+
+void BasicDomain::create_from_snap(const cmdline::parser & cmd,
+                                   double magnification) {
+  string fname = cmd.get<string>("fin");
+  Node::ini_from_snap(&particle, end_pos, MAX_PAR, magnification, fname,
+                      Lx, Ly, tot_rank, myrank);
+  create_cell_list();
+  nPar_per_row = end_pos / (nrows - 2);
+  my_nPar = nPar_per_task = end_pos;
+  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
+
+  if (cmd.get<double>("cg_exp") > 0 || cmd.get<int>("cg_dt") > 0) {
+    cout << "coarse grain" << endl;
+    cgs = new CoarseGrainSnap(cmd, my_nPar * tot_rank);
+  }
+
+  if (myrank == 1) {
+    fout << "create particles by copying the snapshot: " << fname << endl;
+    if (cgs) {
+      fout << "output coarse-grained snapshots with ";
+      if (cmd.get<int>("cg_dt") > 0)
+        cout << "dt = " << cmd.get<int>("cg_dt") << endl;
+      else if (cmd.get<double>("cg_exp") > 0)
+        cout << "exponent = " << cmd.get<double>("cg_exp") << endl;
+    }
+    fout << "-------- Run --------\n";
+    fout << "time step\telapsed time\n";
+  }
 }
 
 void BasicDomain::output(int t) {
+  if (cgs) {
+    cgs->output(particle, end_pos, yl, nrows, t);
+  }
   if (t % 100 == 0) {
     double sv[2];
     int my_num;
@@ -89,17 +164,16 @@ void BasicDomain::output(int t) {
   }
 }
 
-void BasicDomain::ini_output(const string &type, double eta, double eps,
+void BasicDomain::ini_output(const string &tag, double eta, double eps,
                              double rho0 ,unsigned long long seed) {
+  char fname[100];
   if (myrank == 0) {
-    char fname[100];
     snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank, type.c_str());
+             eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
     fout.open(fname);
   } else if (myrank == 1) {
-    char fname[100];
     snprintf(fname, 100, "l_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank, type.c_str());
+             eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
     fout.open(fname);
     time(&beg_time);
     fout << "Started at " << asctime(localtime(&beg_time));
@@ -111,8 +185,6 @@ void BasicDomain::ini_output(const string &type, double eta, double eps,
     fout << "Ly: " << Ly << endl;
     fout << "seed: " << seed << endl;
     fout << "np: " << tot_rank << endl;
-    fout << "-------- Run --------\n";
-    fout << "time step\telapsed time\n";
   }
 }
 
@@ -399,8 +471,11 @@ StaticDomain::StaticDomain(double eta, double eps, double rho0,
                            BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
   set_cell_list(eps);
   ini_output("s", eta, eps, rho0, seed);
-  
+}
 
+StaticDomain::StaticDomain(const cmdline::parser & cmd): BasicDomain(cmd) {
+  set_cell_list(eps);
+  ini_output("s", eta, eps, rho0, cmd.get<unsigned long long>("seed"));
 }
 
 StaticDomain::~StaticDomain() {
@@ -413,6 +488,8 @@ StaticDomain::~StaticDomain() {
     fout << "Finished at " << asctime(localtime(&beg_time));
     fout.close();
   }
+  if (cgs)
+    delete cgs;
 }
 
 void StaticDomain::set_cell_list(double eps) {
@@ -474,6 +551,15 @@ DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
   ini_output(buf, eta, eps, rho0, seed);
 }
 
+DynamicDomain::DynamicDomain(const cmdline::parser & cmd): BasicDomain(cmd) {
+  set_cell_list(eps);
+  row_offset[0] = row_offset[1] = 0;
+  refresh_rate = cmd.get<int>("rate");
+  char buf[10];
+  snprintf(buf, 10, "d%d", refresh_rate);
+  ini_output(buf, eta, eps, rho0, cmd.get<unsigned long long>("seed"));
+}
+
 DynamicDomain::~DynamicDomain() {
   delete[] cell_buf;
   delete[] particle;
@@ -484,6 +570,8 @@ DynamicDomain::~DynamicDomain() {
     fout << "Finished at " << asctime(localtime(&beg_time));
     fout.close();
   }
+  if (cgs)
+    delete cgs;
 }
 
 void DynamicDomain::set_cell_list(double eps) {

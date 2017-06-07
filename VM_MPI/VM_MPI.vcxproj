@@ -154,6 +154,7 @@
     <ClCompile Include="domain.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="node.cpp" />
+    <ClCompile Include="snap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cell.h" />
@@ -162,6 +163,7 @@
     <ClInclude Include="domain.h" />
     <ClInclude Include="node.h" />
     <ClInclude Include="rand.h" />
+    <ClInclude Include="snap.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

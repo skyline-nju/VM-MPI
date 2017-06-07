@@ -9,17 +9,21 @@
 #include "mpi.h"
 #include "rand.h"
 #include "cell.h"
+#include "cmdline.h"
+#include "snap.h"
 
 class BasicDomain
 {
 public:
   BasicDomain(double eta, double eps, double rho0,
               double Lx0, double Ly0, unsigned long long seed);
+  BasicDomain(const cmdline::parser &cmd);
   virtual ~BasicDomain() {};
-  void create_particle_random(int tot_nPar, double multiple);
+  void create_particle_random(int tot_nPar, double magnification);
   void create_from_snap(const std::string &filename, double magnification);
+  void create_from_snap(const cmdline::parser &cmd, double magnification);
   void output(int t);
-  void ini_output(const std::string &type, double eta, double eps,
+  void ini_output(const std::string &tag, double eta, double eps,
                   double rho0, unsigned long long seed);
   void create_cell_list();
   void ini_disorder(double eps, double *disorder, int n);
@@ -45,10 +49,14 @@ protected:
   int pre_rank;
   int next_rank;
 
+  double eta;
+  double eps;
+  double rho0;
   double Lx;
   double Ly;
   double yl;
   double yh;
+  int tot_steps;
 
   Cell *cell;
   int ncols;
@@ -65,9 +73,14 @@ protected:
   int MAX_BUF_SIZE;
   Ran *myran;
   bool disorder_free;
+  bool flag_coarse_grain;
 
   std::time_t beg_time;
-  std::ofstream fout;
+
+  CoarseGrainSnap *cgs;       // output coarse-grained snapshot
+  std::ofstream fout;         // output order parameters for rank = 0
+                              // output log for rank = 1
+
 };
 
 
@@ -76,6 +89,7 @@ class StaticDomain :public BasicDomain
 public:
   StaticDomain(double eta, double eps, double rho0,
                double Lx0, double Ly0, unsigned long long seed);
+  StaticDomain(const cmdline::parser &cmd);
   ~StaticDomain();
   void set_cell_list(double eps);
   void one_step(double eta, int t);
@@ -87,6 +101,7 @@ public:
   DynamicDomain(double eta, double eps, double rho0,
                 double Lx0, double Ly0, unsigned long long seed,
                 int refresh_rate0);
+  DynamicDomain(const cmdline::parser &cmd);
   ~DynamicDomain();
 
   void set_cell_list(double eps);

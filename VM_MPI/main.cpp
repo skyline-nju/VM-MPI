@@ -18,8 +18,11 @@ int main(int argc, char *argv[]) {
   cmd.add<string>("fin", 'f', "input snapshot", false, "");
   cmd.add("dynamic", '\0', "dynamic domain decomposition");
   cmd.add<int>("rate", '\0', "refresh rate of domain", false, 1);
+  cmd.add<int>("cg_dt", '\0', "interval of coarse-grained snapshots", false, 0);
+  cmd.add<double>("cg_exp", '\0',
+                  "exponent to output coarse-grained snapshots in log scales",
+                  false, 0.);
   cmd.parse_check(argc, argv);
-
   double eta = cmd.get<double>("eta");
   double eps = cmd.get<double>("eps");
   double rho0 = cmd.get<double>("rho0");
@@ -33,15 +36,15 @@ int main(int argc, char *argv[]) {
   BasicDomain *subdomain;
   double magnification;
   if (cmd.exist("dynamic")) {
-    subdomain = new DynamicDomain(eta, eps, rho0, Lx, Ly, seed, rate);
+    subdomain = new DynamicDomain(cmd);
     magnification = 1.5;
   }
   else {
-    subdomain = new StaticDomain(eta, eps, rho0, Lx, Ly, seed);
+    subdomain = new StaticDomain(cmd);
     magnification = 3.0;
   }
   if (cmd.exist("fin"))
-    subdomain->create_from_snap(cmd.get<string>("fin"), magnification);
+    subdomain->create_from_snap(cmd, magnification);
   else
     subdomain->create_particle_random(int(Lx * Ly * rho0), magnification);
 
