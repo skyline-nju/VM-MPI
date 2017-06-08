@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     subdomain->create_particle_random(int(Lx * Ly * rho0), magnification);
 
   for (int i = 1; i <= nStep; i++) {
-    subdomain->one_step(eta, i);
+    subdomain->one_step(i);
   }
   delete subdomain;
   MPI_Finalize();

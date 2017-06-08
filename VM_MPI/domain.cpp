@@ -6,37 +6,6 @@ using namespace std;
 /****************************************************************************/
 /*                   Basic class for subdomain                              */
 /****************************************************************************/
-BasicDomain::BasicDomain(double eta, double eps, double rho0,
-                         double Lx0, double Ly0, unsigned long long seed):
-                         Lx(Lx0), Ly(Ly0) {
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
-  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
-  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
-
-  double dLy = Ly / tot_rank;
-  yl = myrank * dLy - 1;
-  yh = (myrank + 1) * dLy + 1;
-  ncols = int(Lx);
-  nrows = int(dLy) + 2;
-  cell = NULL;
-
-  particle = NULL;
-  my_nPar = 0;
-  MAX_PAR = end_pos = MAX_BUF_SIZE = nPar_per_row = nPar_per_task = 0;
-
-  myran = new Ran(seed + myrank);
-  if (eps > 0)
-    disorder_free = false;
-  else
-    disorder_free = true;
-  cgs = NULL;
-
-  cout << "subdomain " << myrank << "\tpre rank " << pre_rank;
-  cout << "\tnext rank " << next_rank << endl;
-  cout << "\tncols = " << ncols << "\tnrows = " << nrows << endl;
-}
-
 BasicDomain::BasicDomain(const cmdline::parser &cmd) {
   eta = cmd.get<double>("eta");
   eps = cmd.get<double>("eps");
@@ -80,22 +49,6 @@ void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
 
   if (myrank == 1) {
     fout << "create particles randomly " << endl;
-    fout << "-------- Run --------\n";
-    fout << "time step\telapsed time\n";
-  }
-}
-
-void BasicDomain::create_from_snap(const string & filename,
-                                   double magnification) {
-  Node::ini_from_snap(&particle, end_pos, MAX_PAR, magnification, filename,
-                      Lx, Ly, tot_rank, myrank);
-  create_cell_list();
-  nPar_per_row = end_pos / (nrows - 2);
-  my_nPar = nPar_per_task = end_pos;
-  MAX_BUF_SIZE = nPar_per_row * 10 * 4;
-
-  if (myrank == 1) {
-    fout << "create particles by copying the snapshot: " << filename << endl;
     fout << "-------- Run --------\n";
     fout << "time step\telapsed time\n";
   }
@@ -195,14 +148,14 @@ void BasicDomain::create_cell_list() {
   }
 }
 
-void BasicDomain::ini_disorder(double eps, double *disorder, int n) {
+void BasicDomain::ini_disorder(double *disorder, int n) {
   double d = 1.0 / (n - 1);
   for (int i = 0; i < n; i++)
     disorder[i] = (-0.5 + i * d) * eps * 2.0 * PI;
   shuffle(disorder, n, myran);
 }
 
-void BasicDomain::update_position_edge_row(int row, double eta) {
+void BasicDomain::update_position_edge_row(int row) {
   if (row != 1 && row != nrows - 2) {
     cout << "Error, row = " << row << " should be equal to "
       << 1 << " or " << nrows - 2 << endl;
@@ -237,7 +190,7 @@ void BasicDomain::update_position_edge_row(int row, double eta) {
   }
 }
 
-void BasicDomain::update_position_inner_rows(double eta) {
+void BasicDomain::update_position_inner_rows() {
   for (int row = 1; row < nrows - 1; row++) {
     int j = row * ncols;
     for (int col = 0; col < ncols; col++) {
@@ -425,7 +378,7 @@ void BasicDomain::shift_boundary(int pre_nPar, int next_nPar, int * offset) {
     }
   }
 }
-void BasicDomain::update_position(double eta) {
+void BasicDomain::update_position() {
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];
@@ -439,16 +392,16 @@ void BasicDomain::update_position(double eta) {
   /* pre_rank -> myrank */
   recv(buf[0], buf_size[0], pre_rank, 12, &req[0]);
   /* myrank -> next_rank */
-  update_position_edge_row(nrows - 2, eta);
+  update_position_edge_row(nrows - 2);
   send(nrows - 1, buf[1], buf_size[1], next_rank, 12, &req[1]);
   /* myrank <- next_rank */
   recv(buf[2], buf_size[2], next_rank, 21, &req[2]);
   /* pre_rank <- myrank */
-  update_position_edge_row(1, eta);
+  update_position_edge_row(1);
   send(0, buf[3], buf_size[3], pre_rank, 21, &req[3]);
 
   /* update position of inner rows */
-  update_position_inner_rows(eta);
+  update_position_inner_rows();
 
   /* pre_rank -> myrank */
   accept(1, buf[0], &buf_size[0], &req[0], &stat[0]);
@@ -466,13 +419,6 @@ void BasicDomain::update_position(double eta) {
 /****************************************************************************/
 /*                   Static domain decomposition                            */
 /****************************************************************************/
-StaticDomain::StaticDomain(double eta, double eps, double rho0,
-                           double Lx0, double Ly0, unsigned long long seed):
-                           BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
-  set_cell_list(eps);
-  ini_output("s", eta, eps, rho0, seed);
-}
-
 StaticDomain::StaticDomain(const cmdline::parser & cmd): BasicDomain(cmd) {
   set_cell_list(eps);
   ini_output("s", eta, eps, rho0, cmd.get<unsigned long long>("seed"));
@@ -501,7 +447,7 @@ void StaticDomain::set_cell_list(double eps) {
     double *my_disorder = new double[my_n];
     double *disorder = new double[n];
     if (myrank == 0) {
-      ini_disorder(eps, disorder, n);
+      ini_disorder(disorder, n);
     }
     MPI_Scatter(disorder, my_n, MPI_DOUBLE,
                 my_disorder, my_n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -529,30 +475,17 @@ void StaticDomain::set_cell_list(double eps) {
   }
 }
 
-void StaticDomain::one_step(double eta, int t) {
+void StaticDomain::one_step(int t) {
   update_velocity();
-  update_position(eta);
+  update_position();
   output(t);
 }
 
 /****************************************************************************/
 /*                   Dynamic domain decomposition                           */
 /****************************************************************************/
-
-DynamicDomain::DynamicDomain(double eta, double eps, double rho0,
-                             double Lx0, double Ly0, unsigned long long seed,
-                             int refresh_rate0):
-                             BasicDomain(eta, eps, rho0, Lx0, Ly0, seed) {
-  set_cell_list(eps);
-  row_offset[0] = row_offset[1] = 0;
-  refresh_rate = refresh_rate0;
-  char buf[10];
-  snprintf(buf, 10, "d%d", refresh_rate);
-  ini_output(buf, eta, eps, rho0, seed);
-}
-
 DynamicDomain::DynamicDomain(const cmdline::parser & cmd): BasicDomain(cmd) {
-  set_cell_list(eps);
+  set_cell_list();
   row_offset[0] = row_offset[1] = 0;
   refresh_rate = cmd.get<int>("rate");
   char buf[10];
@@ -574,7 +507,7 @@ DynamicDomain::~DynamicDomain() {
     delete cgs;
 }
 
-void DynamicDomain::set_cell_list(double eps) {
+void DynamicDomain::set_cell_list() {
   int row_excess = (nrows - 2) / 2;
   int row_beg, row_end;
   if (myrank == 0) {
@@ -603,7 +536,7 @@ void DynamicDomain::set_cell_list(double eps) {
     int tot_cell = ncols * (nrows - 2) * tot_rank;
     double *disorder = new double[tot_cell];
     if (myrank == 0) {
-      ini_disorder(eps, disorder, tot_cell);
+      ini_disorder(disorder, tot_cell);
       double sum = 0;
       for (int i = 0; i < tot_cell; i++)
         sum += disorder[i];
@@ -790,10 +723,10 @@ void DynamicDomain::update_velocity_dynamic() {
   }
 }
 
-void DynamicDomain::one_step(double eta, int t) {
+void DynamicDomain::one_step(int t) {
   //global_rearrange(t);
   local_rearrange(t);
   update_velocity_dynamic();
-  update_position(eta);
+  update_position();
   output(t);
 }

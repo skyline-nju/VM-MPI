@@ -82,7 +82,7 @@ void Snap::set_offset(MPI_Offset *my_offset, MPI_Offset my_size) {
   if (!dynamic) {
     *my_offset = myrank * my_size + offset0;
   } else {
-    int *size_v = new int[tot_rank];
+    MPI_Offset *size_v = new MPI_Offset[tot_rank];
     MPI_Offset *offset = new MPI_Offset[tot_rank];
     MPI_Gather(&my_size, 1, MPI_OFFSET,
                size_v, 1, MPI_OFFSET, 2, MPI_COMM_WORLD);
@@ -91,7 +91,6 @@ void Snap::set_offset(MPI_Offset *my_offset, MPI_Offset my_size) {
       for (int i = 0; i < tot_rank; i++) {
         offset[i] = sum_size + offset0;
         sum_size += size_v[i];
-        cout << "offset = " << offset0 << endl;
       }
     }
     MPI_Scatter(offset, 1, MPI_OFFSET,

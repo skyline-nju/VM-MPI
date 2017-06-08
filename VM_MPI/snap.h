@@ -38,7 +38,6 @@ public:
   ~CoarseGrainSnap();
   void coarse_grain_filtered(const Node *bird, int end_pos, double yl, 
                              unsigned char *count, double &svx, double &svy);
-  void write(const Node *bird, int end_pos, double yl);
   void write(const Node *bird, int end_pos, double yl, int nrows0);
   void output(const Node *bird, int end_pos, double yl, int nrows0, int t);
 private:

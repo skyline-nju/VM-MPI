@@ -16,6 +16,6 @@ if __name__ == "__main__":
     file = "c_0.35_0.02_180_600_108000_1_100.bin"
     data = read(file)
     for frame in data:
-        plt.imshow(frame.T)
+        plt.imshow(frame.T, origin="lower")
         plt.show()
         plt.close()

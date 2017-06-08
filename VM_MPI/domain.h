@@ -15,20 +15,17 @@
 class BasicDomain
 {
 public:
-  BasicDomain(double eta, double eps, double rho0,
-              double Lx0, double Ly0, unsigned long long seed);
   BasicDomain(const cmdline::parser &cmd);
   virtual ~BasicDomain() {};
   void create_particle_random(int tot_nPar, double magnification);
-  void create_from_snap(const std::string &filename, double magnification);
   void create_from_snap(const cmdline::parser &cmd, double magnification);
   void output(int t);
   void ini_output(const std::string &tag, double eta, double eps,
                   double rho0, unsigned long long seed);
   void create_cell_list();
-  void ini_disorder(double eps, double *disorder, int n);
-  void update_position_edge_row(int row, double eta);
-  void update_position_inner_rows(double eta);
+  void ini_disorder(double *disorder, int n);
+  void update_position_edge_row(int row);
+  void update_position_inner_rows();
   void pack(int row, double *buf, int &buf_size);
   void unpack(int row, const double *buf, int buf_size);
   void send(int row, double *buf, int &buf_size, int dest, int tag,
@@ -37,11 +34,11 @@ public:
             MPI_Request *req);
   void accept(int row, double *buf, int *buf_size,
               MPI_Request *req, MPI_Status *stat);
-  double get_noise(double eta);
-  void update_position(double eta);
+  double get_noise();
+  void update_position();
   void update_velocity();
   void shift_boundary(int pre_nPar, int next_nPar, int *offset);
-  virtual void one_step(double eta, int t) = 0;
+  virtual void one_step(int t) = 0;
 
 protected:
   int tot_rank;
@@ -87,28 +84,23 @@ protected:
 class StaticDomain :public BasicDomain
 {
 public:
-  StaticDomain(double eta, double eps, double rho0,
-               double Lx0, double Ly0, unsigned long long seed);
   StaticDomain(const cmdline::parser &cmd);
   ~StaticDomain();
   void set_cell_list(double eps);
-  void one_step(double eta, int t);
+  void one_step(int t);
 };
 
 class DynamicDomain : public BasicDomain
 {
 public:
-  DynamicDomain(double eta, double eps, double rho0,
-                double Lx0, double Ly0, unsigned long long seed,
-                int refresh_rate0);
   DynamicDomain(const cmdline::parser &cmd);
   ~DynamicDomain();
 
-  void set_cell_list(double eps);
+  void set_cell_list();
   void global_rearrange(int t);       /* update row_offset */
   void local_rearrange(int t);
   void update_velocity_dynamic();
-  void one_step(double eta, int t);
+  void one_step(int t);
 
 private:
   Cell *cell_buf;     // The size of cell_buf is larger than the size of
@@ -122,7 +114,7 @@ private:
                       // top boundary moves upward by 1.
 };
 
-inline double BasicDomain::get_noise(double eta) {
+inline double BasicDomain::get_noise() {
   return eta * 2.0 * PI * (myran->doub() - 0.5);
 }
 inline void BasicDomain::send(int row, double *buf, int &buf_size, int dest,
