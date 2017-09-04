@@ -17,7 +17,8 @@ class BasicDomain
 public:
   BasicDomain(const cmdline::parser &cmd);
   virtual ~BasicDomain() {};
-  void create_particle_random(int tot_nPar, double magnification);
+  void create_particle_random(const cmdline::parser &cmd,
+                              int tot_nPar, double magnification);
   void create_from_snap(const cmdline::parser &cmd, double magnification);
   void output(int t);
   void ini_output(const std::string &tag, double eta, double eps,
@@ -75,8 +76,8 @@ protected:
   std::time_t beg_time;
 
   CoarseGrainSnap *cgs;       // output coarse-grained snapshot
-  std::ofstream fout;         // output order parameters for rank = 0
-                              // output log for rank = 1
+  std::ofstream fout;         // output order parameters by rank 0
+                              // output log file by rank 1
 
 };
 

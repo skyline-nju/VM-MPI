@@ -22,6 +22,12 @@ int main(int argc, char *argv[]) {
   cmd.add<double>("cg_exp", '\0',
                   "exponent to output coarse-grained snapshots in log scales",
                   false, 0.);
+  cmd.add<string>("cg_format", '\0', "file format for coarse-grained snapshot",
+                  false, "Hff", cmdline::oneof<string>("Hff", "B"));
+  cmd.add<int>("cg_lx", '\0', "Box size in x for coarse grain", false, 1);
+  cmd.add<int>("cg_ly", '\0', "Box size in y for coarse grain", false, 1);
+  cmd.add<int>("t_equil", '\0', "time steps to reach steady state", false, 100000);
+  cmd.add<double>("tilt", '\0', "tilt", false, 0);
   cmd.parse_check(argc, argv);
   double eta = cmd.get<double>("eta");
   double eps = cmd.get<double>("eps");
@@ -41,12 +47,12 @@ int main(int argc, char *argv[]) {
   }
   else {
     subdomain = new StaticDomain(cmd);
-    magnification = 3.0;
+    magnification = 2.5;
   }
   if (cmd.exist("fin"))
     subdomain->create_from_snap(cmd, magnification);
   else
-    subdomain->create_particle_random(int(Lx * Ly * rho0), magnification);
+    subdomain->create_particle_random(cmd, int(Lx * Ly * rho0), magnification);
 
   for (int i = 1; i <= nStep; i++) {
     subdomain->one_step(i);

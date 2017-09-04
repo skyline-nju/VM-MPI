@@ -9,7 +9,7 @@ using namespace std;
 BasicDomain::BasicDomain(const cmdline::parser &cmd) {
   eta = cmd.get<double>("eta");
   eps = cmd.get<double>("eps");
-  rho0 = cmd.get<double>("eps");
+  rho0 = cmd.get<double>("rho0");
   Lx = cmd.get<double>("Lx");
   Ly = cmd.get<double>("Ly");
   tot_steps = cmd.get<int>("nstep");
@@ -36,7 +36,8 @@ BasicDomain::BasicDomain(const cmdline::parser &cmd) {
   cgs = NULL;
 }
 
-void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
+void BasicDomain::create_particle_random(const cmdline::parser &cmd,
+                                         int tot_nPar, double magnification) {
   my_nPar = tot_nPar / tot_rank;
   MAX_PAR = int(my_nPar * magnification);
   particle = new Node[MAX_PAR];
@@ -47,8 +48,23 @@ void BasicDomain::create_particle_random(int tot_nPar, double magnification) {
   nPar_per_task = my_nPar;
   MAX_BUF_SIZE = nPar_per_row * 10 * 4;
 
+  if (cmd.get<double>("cg_exp") > 0 || cmd.get<int>("cg_dt") > 0) {
+    cout << "coarse grain" << endl;
+    if (myrank == 0)
+      mkdir("coarse");
+    MPI_Barrier(MPI_COMM_WORLD);
+    cgs = new CoarseGrainSnap(cmd, my_nPar * tot_rank);
+  }
   if (myrank == 1) {
-    fout << "create particles randomly " << endl;
+    fout << "create particles with random positions and velocities." << endl;
+    if (cgs) {
+      fout << "output coarse-grained snapshots with ";
+      if (cmd.get<int>("cg_dt") > 0)
+        fout << "dt = " << cmd.get<int>("cg_dt");
+      if (cmd.get<double>("cg_exp") > 0)
+        fout << ", exponent = " << cmd.get<double>("cg_exp");
+      fout << endl;
+    }
     fout << "-------- Run --------\n";
     fout << "time step\telapsed time\n";
   }
@@ -59,6 +75,13 @@ void BasicDomain::create_from_snap(const cmdline::parser & cmd,
   string fname = cmd.get<string>("fin");
   Node::ini_from_snap(&particle, end_pos, MAX_PAR, magnification, fname,
                       Lx, Ly, tot_rank, myrank);
+  if (cmd.exist("tilt")) {
+    double k = cmd.get<double>("tilt");
+    for (int i = 0; i < end_pos; i++) {
+      particle[i].x += k * particle[i].y;
+      particle[i].x = fmod(particle[i].x, Lx);
+    }
+  }
   create_cell_list();
   nPar_per_row = end_pos / (nrows - 2);
   my_nPar = nPar_per_task = end_pos;
@@ -66,6 +89,9 @@ void BasicDomain::create_from_snap(const cmdline::parser & cmd,
 
   if (cmd.get<double>("cg_exp") > 0 || cmd.get<int>("cg_dt") > 0) {
     cout << "coarse grain" << endl;
+    if (myrank == 0)
+      mkdir("coarse");
+    MPI_Barrier(MPI_COMM_WORLD);
     cgs = new CoarseGrainSnap(cmd, my_nPar * tot_rank);
   }
 
@@ -74,9 +100,10 @@ void BasicDomain::create_from_snap(const cmdline::parser & cmd,
     if (cgs) {
       fout << "output coarse-grained snapshots with ";
       if (cmd.get<int>("cg_dt") > 0)
-        cout << "dt = " << cmd.get<int>("cg_dt") << endl;
-      else if (cmd.get<double>("cg_exp") > 0)
-        cout << "exponent = " << cmd.get<double>("cg_exp") << endl;
+        fout << "dt = " << cmd.get<int>("cg_dt");
+      if (cmd.get<double>("cg_exp") > 0)
+        fout << ", exponent = " << cmd.get<double>("cg_exp");
+      fout << endl;
     }
     fout << "-------- Run --------\n";
     fout << "time step\telapsed time\n";
@@ -121,12 +148,14 @@ void BasicDomain::ini_output(const string &tag, double eta, double eps,
                              double rho0 ,unsigned long long seed) {
   char fname[100];
   if (myrank == 0) {
-    snprintf(fname, 100, "p_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
+    mkdir("phi");
+    snprintf(fname, 100, "phi%sp_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
+             delimiter.c_str(), eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
     fout.open(fname);
   } else if (myrank == 1) {
-    snprintf(fname, 100, "l_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
-             eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
+    mkdir("log");
+    snprintf(fname, 100, "log%sl_%g_%g_%g_%g_%g_%llu_n%d%s.dat",
+             delimiter.c_str(), eta, eps, rho0, Lx, Ly, seed, tot_rank, tag.c_str());
     fout.open(fname);
     time(&beg_time);
     fout << "Started at " << asctime(localtime(&beg_time));
