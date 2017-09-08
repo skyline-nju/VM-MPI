@@ -57,8 +57,8 @@ protected:
   int tot_steps;
 
   Cell *cell;
-  int ncols;
-  int nrows;
+  int ncols;                   // int(Lx)
+  int nrows;                   // int(Ly/tot_rank) + 2
 
   Node *particle;
   int my_nPar;

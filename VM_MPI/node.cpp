@@ -1,5 +1,6 @@
 #include "node.h"
 #include "mpi.h"
+#include <cstring>
 
 using namespace std;
 double Node::v0 = 0.5;
@@ -58,8 +59,10 @@ void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
     cout << "Error, " << filename << " doesn't exist!\n";
     exit(1);
   }
+  char fname[100];
+  strcpy(fname, filename.c_str());
   MPI_File_open(
-    MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fin);
+    MPI_COMM_WORLD, fname, MPI_MODE_RDONLY, MPI_INFO_NULL, &fin);
   MPI_Offset size;
   MPI_File_get_size(fin, &size);
   int size_buf = size / 4;

@@ -6,6 +6,8 @@ Snap::Snap(const cmdline::parser & cmd, int tot_n):
            global_nPar(tot_n), idx_frame(0), offset0(0) {
   MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
   MPI_Comm_size(MPI_COMM_WORLD, &tot_rank);
+  pre_rank = myrank == 0 ? tot_rank - 1 : myrank - 1;
+  next_rank = myrank == tot_rank - 1 ? 0 : myrank + 1;
 
   int nstep = cmd.get<int>("nstep");
   int dt = cmd.get<int>("cg_dt");
@@ -126,110 +128,145 @@ CoarseGrainSnap::CoarseGrainSnap(const cmdline::parser &cmd, int tot_n):
 CoarseGrainSnap::~CoarseGrainSnap() {
 }
 
-void CoarseGrainSnap::coarse_grain(const Node * bird, int end_pos, double yl,
-                                   unsigned short * par_num,
-                                   float * vx, float * vy, double *sum_v) {
-  double y0 = yl + 1;
-  sum_v[0] = sum_v[1] = 0;
-  for (int i = 0; i < ncells; i++) {
-    par_num[i] = 0;
-    vx[i] = 0;
-    vy[i] = 0;
+
+void CoarseGrainSnap::set_first_row(double yl, int nrows_domain) {
+  int ymin = yl + 1;
+  int ymax = ymin + nrows_domain - 2;
+  if (ymin % ly == 0) {
+    flag_recv = false;
+    first_row = ymin / ly - 1;
+    int dy = ymax - ymin;
+    flag_send = dy % ly == 0 ? false : true;
+    nrows = dy / ly + 2;
+  } else {
+    flag_recv = true;
+    first_row = ymin / ly;
+    int dy = ymax - ymin + ymin % ly;
+    flag_send = dy % ly == 0 ? false : true;
+    nrows = dy / ly + 2;
   }
-  for (int i = 0; i < end_pos; i++) {
-    if (!bird[i].is_empty && !bird[i].is_ghost) {
-      int col = bird[i].x / lx;
-      if (col >= ncols) col = 0;
-      int row = (bird[i].y - y0) / ly;
-      if (row >= nrows) row = 0;
-      int idx_cell = col + row * ncols;
-      par_num[idx_cell]++;
-      vx[idx_cell] += bird[i].vx;
-      vy[idx_cell] += bird[i].vy;
-      sum_v[0] += bird[i].vx;
-      sum_v[1] += bird[i].vy;
+  ncells = nrows * ncols;
+}
+
+void CoarseGrainSnap::save_snap(unsigned char * par_num) {
+  MPI_Offset my_offset = offset0;
+  MPI_Request req[2];
+  unsigned char *recv_buf;
+  if (flag_send) {
+    MPI_Isend(par_num + (nrows - 1) * ncols, ncols, MPI_UNSIGNED_CHAR,
+              next_rank, 1, MPI_COMM_WORLD, &req[0]);
+  }
+  if (flag_recv) {
+    recv_buf = new unsigned char[ncols];
+    MPI_Irecv(recv_buf, ncols, MPI_UNSIGNED_CHAR,
+              pre_rank, 1, MPI_COMM_WORLD, &req[1]);
+    my_offset += first_row * ncols * sizeof(unsigned char);
+    MPI_File_write_at(fh, my_offset + ncols * sizeof(unsigned char),
+                      par_num + ncols, (nrows - 2) * ncols,
+                      MPI_UNSIGNED_CHAR, MPI_STATUS_IGNORE);
+    MPI_Wait(&req[0], MPI_STATUS_IGNORE);
+    for (int i = 0; i < ncols; i++) {
+      par_num[i] += recv_buf[i];
     }
+    delete[] recv_buf;
+    MPI_File_write_at(fh, my_offset, par_num, ncols,
+                      MPI_UNSIGNED_CHAR, MPI_STATUS_IGNORE);
+  } else {
+    my_offset += (first_row + 1) *  ncols * sizeof(unsigned char);
+    MPI_File_write_at(fh, my_offset, par_num + ncols, (nrows - 2) * ncols,
+                      MPI_UNSIGNED_CHAR, MPI_STATUS_IGNORE);
   }
-  for (int i = 0; i < ncells; i++) {
-    if (par_num[i] > 0) {
+  offset0 += global_ncells * sizeof(unsigned char);
+  MPI_Wait(&req[0], MPI_STATUS_IGNORE);
+}
+
+void CoarseGrainSnap::save_snap(unsigned short *par_num, float *vx, float *vy) {
+  MPI_Request req[6];
+  unsigned short *recv_buf0;
+  float *recv_buf1;
+  float *recv_buf2;
+  if (flag_send) {
+    int k = (nrows - 1) * ncols;
+    MPI_Isend(&par_num[k], ncols, MPI_UNSIGNED_SHORT, next_rank, 0,
+              MPI_COMM_WORLD, &req[0]);
+    MPI_Isend(&vx[k], ncols, MPI_FLOAT, next_rank, 1, MPI_COMM_WORLD, &req[1]);
+    MPI_Isend(&vy[k], ncols, MPI_FLOAT, next_rank, 2, MPI_COMM_WORLD, &req[2]);
+  }
+  if (flag_recv) {
+    recv_buf0 = new unsigned short[ncols];
+    recv_buf1 = new float[ncols];
+    recv_buf2 = new float[ncols];
+    MPI_Irecv(recv_buf0, ncols, MPI_UNSIGNED_SHORT, pre_rank, 0,
+              MPI_COMM_WORLD, &req[3]);
+    MPI_Irecv(recv_buf1, ncols, MPI_FLOAT, pre_rank, 1,
+              MPI_COMM_WORLD, &req[4]);
+    MPI_Irecv(recv_buf2, ncols, MPI_FLOAT, pre_rank, 2,
+              MPI_COMM_WORLD, &req[5]);
+    for (int i = ncols; i < (nrows - 1) * ncols; i++) {
       vx[i] /= par_num[i];
       vy[i] /= par_num[i];
     }
-  }
-}
-
-void CoarseGrainSnap::coarse_grain_filtered(const Node * bird, int end_pos,
-                                            double yl, unsigned char *count,
-                                            double &svx, double &svy) {
-  double y0 = yl + 1;
-  svx = svy = 0;
-  for (int i = 0; i < ncells; i++)
-    count[i] = 0;
-  for (int i = 0; i < end_pos; i++) {
-    if (!bird[i].is_empty && !bird[i].is_ghost) {
-      svx += bird[i].vx;
-      svy += bird[i].vy;
-      if (bird[i].vx > 0) {
-        int col = int(bird[i].x);
-        int row = int(bird[i].y - y0);
-        if (col + ncols * row >= ncells) {
-          cout << "col = " << col << "\trow = " << row << "\tncells = " << ncells << endl;
-        }
-        count[col + ncols * row]++;
-      }
+    MPI_Waitall(3, &req[3], MPI_STATUSES_IGNORE);
+    for (int i = 0; i < ncols; i++) {
+      par_num[i] += recv_buf0[i];
+      vx[i] = (vx[i] + recv_buf1[i]) / par_num[i];
+      vy[i] = (vy[i] + recv_buf2[i]) / par_num[i];
     }
-  }
-}
-
-void CoarseGrainSnap::write(const Node *bird, int end_pos,
-                            double yl, int nrows0, int t) {
-  if (dynamic) {
-    nrows = nrows0 - 2;
-    ncells = nrows * ncols;
-  }
-  if (format == "B") {
-    unsigned char *count = new unsigned char[ncells];
-    double sum_v[2];
-    coarse_grain_filtered(bird, end_pos, yl, count, sum_v[0], sum_v[1]);
-    output_t_and_v(t, sum_v);
-    MPI_Offset my_offset;
-    set_offset(&my_offset, ncells * sizeof(unsigned char));
-    MPI_File_write_at_all_begin(fh, my_offset, count, ncells, MPI_UNSIGNED_CHAR);
-    MPI_File_write_at_all_end(fh, count, MPI_STATUS_IGNORE);
-    delete[] count;
-  } else if (format == "Hff") {
-    unsigned short *particle_num = new unsigned short[ncells];
-    float *vx = new float[ncells];
-    float *vy = new float[ncells];
-    double sum_v[2];
-    coarse_grain(bird, end_pos, yl, particle_num, vx, vy, sum_v);
-    // output time and vx, vy
-    output_t_and_v(t, sum_v);
-    // output particle number of each box
-    MPI_Offset my_offset = offset0 + myrank * ncells * sizeof(unsigned short);
-    MPI_File_write_at(fh, my_offset, particle_num, ncells,
-                      MPI_UNSIGNED_SHORT, MPI_STATUSES_IGNORE);
-    offset0 += tot_rank * ncells * sizeof(unsigned short);
-    // output vx 
-    my_offset = offset0 + myrank * ncells * sizeof(float);
-    MPI_File_write_at(fh, my_offset, vx, ncells,
-                      MPI_FLOAT, MPI_STATUSES_IGNORE);
-    offset0 += tot_rank * ncells * sizeof(float);
-    // output vy
-    my_offset = offset0 + myrank * ncells * sizeof(float);
-    MPI_File_write_at(fh, my_offset, vy, ncells,
-                      MPI_FLOAT, MPI_STATUSES_IGNORE);
-    offset0 += tot_rank * ncells * sizeof(float);
-    delete[] particle_num;
-    delete[] vx;
-    delete[] vy;
+    delete[] recv_buf0;
+    delete[] recv_buf1;
+    delete[] recv_buf2;
+    MPI_Offset my_offset = offset0 + first_row * ncols * sizeof(unsigned short);
+    MPI_File_write_at(fh, my_offset, par_num, (nrows - 1) * ncols,
+                      MPI_UNSIGNED_SHORT, MPI_STATUS_IGNORE);
+    offset0 += global_ncells * sizeof(unsigned short);
+    my_offset = offset0 + first_row * ncols * sizeof(float);
+    MPI_File_write_at(fh, my_offset, vx, (nrows - 1) * ncols,
+                      MPI_FLOAT, MPI_STATUS_IGNORE);
+    offset0 += global_ncells * sizeof(unsigned short);
+    my_offset = offset0 + first_row * ncols * sizeof(float);
+    MPI_File_write_at(fh, my_offset, vy, (nrows - 1) * ncols,
+                      MPI_FLOAT, MPI_STATUS_IGNORE);
+    my_offset = offset0 + first_row * ncols * sizeof(float);
+  } else {
+    MPI_Offset my_offset = offset0 + (first_row + 1) * ncols * sizeof(unsigned short);
+    MPI_File_write_at(fh, my_offset, &par_num[ncols], (nrows - 2) * ncols,
+                      MPI_UNSIGNED_SHORT, MPI_STATUS_IGNORE);
+    offset0 += global_ncells * sizeof(unsigned short);
+    my_offset = offset0 + (first_row + 1) * ncols * sizeof(float);
+    MPI_File_write_at(fh, my_offset, &vx[ncols], (nrows - 2) * ncols,
+                      MPI_FLOAT, MPI_STATUS_IGNORE);
+    offset0 += global_ncells * sizeof(float);
+    my_offset = offset0 + (first_row + 1) * ncols * sizeof(float);
+    MPI_File_write_at(fh, my_offset, &vy[ncols], (nrows - 2) * ncols,
+                      MPI_FLOAT, MPI_STATUS_IGNORE);
+    offset0 += global_ncells * sizeof(float);
   }
 }
 
 void CoarseGrainSnap::output(const Node * bird, int end_pos,
-                             double yl, int nrows0, int t) {
+                             double yl, int nrows_domain, int t) {
   if (t == frame[idx_frame]) {
-    write(bird, end_pos, yl, nrows0, t);
+    set_first_row(yl, nrows_domain);
+    double sum_v[2];
+    if (format == "Hff") {
+      unsigned short *par_num = new unsigned short[ncells];
+      float *vx = new float[ncells];
+      float *vy = new float[ncells];
+      coarse_grain(bird, end_pos, first_row, lx, ly, ncols, nrows,
+                   par_num, vx, vy, sum_v);
+      output_t_and_v(t, sum_v);
+      save_snap(par_num, vx, vy);
+      delete[] par_num;
+      delete[] vx;
+      delete[] vy;
+    } else {
+      unsigned char *par_num = new unsigned char[ncells];
+      coarse_grain(bird, end_pos, first_row, lx, ly, ncols, nrows,
+                   par_num, sum_v, true);
+      output_t_and_v(t, sum_v);
+      save_snap(par_num);
+      delete[] par_num;
+    }
     if (myrank == 1)
       cout << idx_frame << "frame, t = " << t << endl;
     idx_frame++;
