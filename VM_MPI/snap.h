@@ -68,8 +68,8 @@ void coarse_grain(const Node *bird, int end_pos,
   sum_v[1] = 0;
   for (int i = 0; i < end_pos; i++) {
     if (!bird[i].is_empty && !bird[i].is_ghost) {
-      svx += bird[i].vx;
-      svy += bird[i].vy;
+      sum_v[0] += bird[i].vx;
+      sum_v[1] += bird[i].vy;
       if (!filtered || bird[i].vx > 0) {
         int col = bird[i].x / lx;
         if (col > ncols) col = 0;
