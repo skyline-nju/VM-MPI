@@ -51,6 +51,21 @@ void Node::ini_random(Node * par, int nPar, Ran * myran,
   }
 }
 
+void Node::ini_random(Node * par, int nPar, Ran * myran,
+                      double Lx, double Ly, double x0, double y0) {
+  for (int i = 0; i < nPar; i++) {
+    par[i].x = myran->doub() * Lx + x0;
+    par[i].y = myran->doub() * Ly + y0;
+    double theta = myran->doub() * 2 * PI;
+    par[i].vx = par[i].vx0 = cos(theta);
+    par[i].vy = par[i].vy0 = sin(theta);
+    par[i].is_moved = false;
+    par[i].is_empty = false;
+    par[i].is_ghost = false;
+    par[i].new_arrival = false;
+  }
+}
+
 void Node::ini_from_snap(Node **par, int &npar, int &max_par_num,
                          double magnification, const std::string &filename,
                          double Lx, double Ly, int tot_rank, int myrank) {

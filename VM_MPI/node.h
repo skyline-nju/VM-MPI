@@ -12,13 +12,21 @@ struct Node
   void align(Node *node, double a, double b);
   int cell_idx(double yl, int ncols);
   void update_coor(double noise, double Lx, double yl);
+
+  // Initialize with random position and velocity orientation.
   static void ini_random(Node *par, int nPar, Ran *myran,
                          double Lx, double yl, double yh);
+  static void ini_random(Node *par, int nPar, Ran *myran,
+                         double Lx, double Ly, double x0, double y0);
+
+  // Initialize by loading the inputting snapshot.
   static void ini_from_snap(Node **par, int &npar, int &max_par_num,
                             double magnification, const std::string &filename,
                             double Lx, double Ly, int tot_rank, int myrank);
+
   static void sum_v(const Node *par, int end_pos,
                     int &npar, double &svx, double &svy);
+
   static int get_nPar(const Node *par, int end_pos);
 
   double x;

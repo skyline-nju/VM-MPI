@@ -7,7 +7,7 @@
     </Filter>
     <Filter Include="头文件">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
     <Filter Include="资源文件">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
@@ -15,51 +15,39 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="comn.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="node.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="domain.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="cell.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="snap.cpp">
+    <ClCompile Include="comn.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="domain2d.cpp">
+    <ClCompile Include="cellList.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="subDomain.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="comn.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="rand.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="node.h">
+    <ClInclude Include="comn.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="cell.h">
+    <ClInclude Include="vect.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="domain.h">
+    <ClInclude Include="particle.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="cmdline.h">
+    <ClInclude Include="cellList.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="snap.h">
+    <ClInclude Include="boundary.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="domain2d.h">
+    <ClInclude Include="subDomain.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

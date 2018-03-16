@@ -1,7 +1,10 @@
-/****************************************************************************/
-/*           Decompose the simulation domain into several subdomains,       */
-/*                       then run parallelly with MPI.                      */
-/****************************************************************************/
+/*
+  Decompose the simulation domain into n * 1 subdomains statically or dynamically, 
+  with n rows and 1 column. 
+
+  Each subdomain communicates with its upper and lower neighbors every time step
+  by using MPI.
+*/
 #ifndef DOMAIN_H
 #define DOMAIN_H
 #include <vector>
