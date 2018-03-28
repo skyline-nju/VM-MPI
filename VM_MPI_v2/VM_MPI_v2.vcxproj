@@ -143,6 +143,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="cellList.cpp" />
+    <ClCompile Include="cellList2D.cpp" />
     <ClCompile Include="comn.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="subDomain.cpp" />
@@ -150,9 +151,12 @@
   <ItemGroup>
     <ClInclude Include="boundary.h" />
     <ClInclude Include="cellList.h" />
+    <ClInclude Include="cellList2D.h" />
     <ClInclude Include="comn.h" />
+    <ClInclude Include="node.h" />
     <ClInclude Include="particle.h" />
     <ClInclude Include="rand.h" />
+    <ClInclude Include="singleDomain2D.h" />
     <ClInclude Include="subDomain.h" />
     <ClInclude Include="vect.h" />
   </ItemGroup>

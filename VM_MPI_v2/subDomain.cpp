@@ -4,6 +4,7 @@ DomainBase::DomainBase(double Lx, double Ly, double Rho, double eta0,
                        Ull seed0, double v)
     : system_size(Lx, Ly), rho0(Rho), eta(eta0), seed(seed0), v0(v) {
   nPar = int(Lx * Ly * Rho);
+  std::cout << "nPar = " << nPar << "\n";
 }
 
 DomainBase::~DomainBase() {
@@ -56,6 +57,8 @@ SingleDomain2::SingleDomain2(double Lx, double Ly, double Rho, double eta0, Ull 
   : DomainBase(Lx, Ly, Rho, eta0, seed0) {
   pbc = new PBC_2(Lx, Ly);
   myran = new Ran(seed);
+
+  std::cout << "seed = " << seed << "\n";
 }
 
 void SingleDomain2::ini_rand() {
@@ -65,6 +68,11 @@ void SingleDomain2::ini_rand() {
   }
   cl = new CellListNode_2(system_size.x, system_size.y, 1.0);
   cl->create(p_arr);
+
+  double phi, theta;
+  cal_order_para(phi, theta);
+  std::cout << "t = 0\t phi = " << phi << ", theta = " << theta << "\n";
+
 }
 
 void SingleDomain2::cal_force() {
@@ -90,14 +98,7 @@ void SingleDomain2::integrate2() {
 }
 
 void SingleDomain2::cal_order_para(double & phi, double & theta) const {
-  double svx = 0;
-  double svy = 0;
-  for (int i = 0; i < nPar; i++) {
-    svx += p_arr[i].vx;
-    svy += p_arr[i].vy;
-  }
-  phi = std::sqrt(svx * svx + svy * svy) / nPar;
-  theta = std::atan2(svy, svx);
+  func_order_para(p_arr, phi, theta);
 }
 
 SingleDomain3::SingleDomain3(double Lx, double Ly, double Rho, double eta0, Ull seed0)

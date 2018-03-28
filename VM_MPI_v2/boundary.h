@@ -1,6 +1,7 @@
 #ifndef BOUNDARY_H
 #define BOUNDARY_H
 #include "vect.h"
+#include <iostream>
 class PBC_X_2 {
 public:
   PBC_X_2() {}
@@ -51,11 +52,11 @@ class PBC_2 {
 public:
   PBC_2() : L(), half_L() {}
   PBC_2(double Lx, double Ly) :
-    L(Lx, Ly), half_L(0.5 * Lx, 0.5 * Ly) {
-  }
+    L(Lx, Ly), half_L(0.5 * Lx, 0.5 * Ly) {}
+
   PBC_2(const Vec_2<double> &L0) :
-    L(L0), half_L(0.5 * L0.x, 0.5 * L0.y) {
-  }
+    L(L0), half_L(0.5 * L0.x, 0.5 * L0.y) {}
+
   void ini(double Lx, double Ly);
 
   void nearest_dis(Vec_2<double> &dis) const;

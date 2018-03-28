@@ -27,6 +27,9 @@
     <ClCompile Include="subDomain.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="cellList2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="rand.h">
@@ -48,6 +51,15 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="subDomain.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="node.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="cellList2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="singleDomain2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

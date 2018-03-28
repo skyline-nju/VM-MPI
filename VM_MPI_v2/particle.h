@@ -18,6 +18,9 @@ public:
   template <class Par, class BondaryCondi>
   void interact(Par &p, const BondaryCondi &bc);
 
+  template <class Par, class BondaryCondi>
+  void interact(Par &p, const BondaryCondi &bc, int &count);
+
   template <class BondaryCondi>
   void move(double eta, double v0, Ran &myran, const BondaryCondi &bc);
 
@@ -49,6 +52,17 @@ inline void Par1::interact(Par &p, const BondaryCondi &bc) {
     vy_next += p.vy;
     p.vx_next += vx;
     p.vy_next += vy;
+  }
+}
+
+template <class Par, class BondaryCondi>
+inline void Par1::interact(Par &p, const BondaryCondi &bc, int &count) {
+  if (bc.nearest_dis_square(*this, p) < 1) {
+    vx_next += p.vx;
+    vy_next += p.vy;
+    p.vx_next += vx;
+    p.vy_next += vy;
+    count++;
   }
 }
 
@@ -148,4 +162,17 @@ inline void BiNode::break_away(BiNode **head) const {
   }
 }
 
+
+template <class _TPar>
+void func_order_para(const std::vector<_TPar> &p_arr, double &phi, double &theta) {
+  double svx = 0;
+  double svy = 0;
+  int nPar = p_arr.size();
+  for (int i = 0; i < nPar; i++) {
+    svx += p_arr[i].vx;
+    svy += p_arr[i].vy;
+  }
+  phi = std::sqrt(svx * svx + svy * svy) / nPar;
+  theta = std::atan2(svy, svx);
+}
 #endif

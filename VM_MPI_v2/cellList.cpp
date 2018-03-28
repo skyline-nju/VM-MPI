@@ -17,6 +17,7 @@ CellListIdx_2::CellListIdx_2(double Lx, double Ly, double rcut)
     cell.emplace_back();
     list_len.push_back(0);
   }
+  std::cout << bins.x << "\t" << bins.y << "\n";
 }
 
 CellListNode_2::CellListNode_2(double Lx, double Ly, double rcut)
