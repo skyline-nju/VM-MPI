@@ -21,8 +21,8 @@ int main(int argc, char* argv[]) {
   double rho0 = 1;
   double eta = 0.1;
   unsigned long long seed = 1;
-  int n_step = 500;
-  int t_start = 100;
+  int n_step = 50000;
+  int t_start = 10000;
   int t_sep = 100;
 #ifndef USE_MPI
   SingleDomain2 domain(L, L, rho0, eta, seed);
@@ -93,13 +93,15 @@ int main(int argc, char* argv[]) {
   //std::cout << "phi = " << phi_mean / count << std::endl;
 
   SDomain_2<UniNode<Par1>> sd2(L, L, rho0, seed);
+  //SDomain_2<Par1> sd2(L, L, rho0, seed);
+
   sd2.ini_rand();
   phi_mean = 0;
   count = 0;
   t1 = std::chrono::system_clock::now();
   for (int i = 0; i < n_step; i++) {
     sd2.cal_force();
-    sd2.integrate(eta);
+    sd2.integrate2(eta);
     if (i >= t_start && i % t_sep == 0) {
       double phi, theta;
       sd2.cal_order_para(phi, theta);

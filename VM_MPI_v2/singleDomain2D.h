@@ -13,6 +13,7 @@ public:
   void ini_rand();
   void cal_force();
   void integrate(double eta, double v0 = 0.5);
+  void integrate2(double eta, double v0 = 0.5);
   void cal_order_para(double &phi, double &theta) const;
 
 private:
@@ -69,7 +70,15 @@ void SDomain_2<_TPar>::integrate(double eta, double v0) {
   for (int i = 0; i < nPar; i++) {
     p_arr[i].move(eta, v0, myran, pbc);
   }
-  cell_list.update(p_arr);
+  cell_list.recreate();
+}
+
+template<class _TPar>
+void SDomain_2<_TPar>::integrate2(double eta, double v0) {
+  auto move = [this, eta, v0](_TPar *p) {
+    p->move(eta, v0, myran, pbc);
+  };
+  cell_list.update(move);
 }
 
 template<class _TPar>

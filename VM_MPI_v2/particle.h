@@ -27,7 +27,7 @@ public:
   template <class BondaryCondi>
   void move(double eta, double v0, Ran &myran, const BondaryCondi &bc,
     Vec_2<int> &d_cell);
-
+  
   double x;
   double y;
   double vx;
