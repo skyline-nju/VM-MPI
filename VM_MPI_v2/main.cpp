@@ -7,7 +7,28 @@
 
 using namespace std;
 
+//template <typename T>
+//void foo(T x, vector<T*> &y) {
+//	cout << "a" << endl;
+//}
+//
+//template <typename T>
+//void foo(T x, vector<T> &y) {
+//	cout << "b" << endl;
+//}
+
 int main(int argc, char* argv[]) {
+
+	//std::vector<double *> vect_a;
+	//std::vector<double> vect_b;
+
+	//double scalar = 1;
+	//foo(scalar, vect_a);
+	//foo(scalar, vect_b);
+
+
+
+
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
 #endif
@@ -17,12 +38,12 @@ int main(int argc, char* argv[]) {
   //MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   //cout << my_rank << " of " << size << " procs\n";
 
-  double L = 32;
+  double L = 64;
   double rho0 = 1;
   double eta = 0.1;
   unsigned long long seed = 1;
-  int n_step = 50000;
-  int t_start = 10000;
+  int n_step = 10000;
+  int t_start = 4000;
   int t_sep = 100;
 #ifndef USE_MPI
   SingleDomain2 domain(L, L, rho0, eta, seed);
@@ -92,8 +113,8 @@ int main(int argc, char* argv[]) {
   //std::cout << elapsed_time.count() << std::endl;
   //std::cout << "phi = " << phi_mean / count << std::endl;
 
-  SDomain_2<UniNode<Par1>> sd2(L, L, rho0, seed);
-  //SDomain_2<Par1> sd2(L, L, rho0, seed);
+  //SDomain_2<Par1, std::list<Par1*>> sd2(L, L, rho0, seed);
+  SDomain_2<UniNode<Par1>, UniNode<Par1>*> sd2(L, L, rho0, seed);
 
   sd2.ini_rand();
   phi_mean = 0;
@@ -101,7 +122,7 @@ int main(int argc, char* argv[]) {
   t1 = std::chrono::system_clock::now();
   for (int i = 0; i < n_step; i++) {
     sd2.cal_force();
-    sd2.integrate2(eta);
+    sd2.integrate(eta);
     if (i >= t_start && i % t_sep == 0) {
       double phi, theta;
       sd2.cal_order_para(phi, theta);

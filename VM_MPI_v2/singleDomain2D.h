@@ -4,7 +4,7 @@
 #include "rand.h"
 #include "boundary.h"
 
-template <class _TPar>
+template <typename _TPar, typename _TCell>
 class SDomain_2 {
 public:
   typedef unsigned long long int Ull;
@@ -18,7 +18,7 @@ public:
 
 private:
   Ran myran;
-  CellList_2<_TPar> cell_list;
+	Cell_list_2<_TCell> cell_list;
   PBC_2 pbc;
   std::vector<_TPar> p_arr;
   Vec_2<double> domain_size;
@@ -28,8 +28,8 @@ private:
 
 
 
-template<class _TPar>
-SDomain_2<_TPar>::SDomain_2(double Lx, double Ly, double Rho, Ull seed0, double r_cut):
+template<typename _TPar, typename _TCell>
+SDomain_2<_TPar, _TCell>::SDomain_2(double Lx, double Ly, double Rho, Ull seed0, double r_cut):
   myran(seed0), cell_list(Lx, Ly, 0, 0, r_cut), pbc(Lx, Ly) {
   nPar = int(Lx * Ly * Rho);
   p_arr.reserve(nPar);
@@ -40,8 +40,8 @@ SDomain_2<_TPar>::SDomain_2(double Lx, double Ly, double Rho, Ull seed0, double 
   std::cout << "nPar = " << nPar << "\n";
 }
 
-template<class _TPar>
-void SDomain_2<_TPar>::ini_rand() {
+template<typename _TPar, typename _TCell>
+void SDomain_2<_TPar, _TCell>::ini_rand() {
   for (int i = 0; i < nPar; i++) {
     p_arr.emplace_back(myran, domain_size.x, domain_size.y);
   }
@@ -51,8 +51,8 @@ void SDomain_2<_TPar>::ini_rand() {
   std::cout << "t = 0\t phi = " << phi << ", theta = " << theta << "\n";
 }
 
-template<class _TPar>
-void SDomain_2<_TPar>::cal_force() {
+template<typename _TPar, typename _TCell>
+void SDomain_2<_TPar, _TCell>::cal_force() {
   auto f_ij = [this](_TPar *pi, _TPar *pj) {
     pi->interact(*pj, pbc);
   };
@@ -65,24 +65,24 @@ void SDomain_2<_TPar>::cal_force() {
   //std::cout << "count = " << count << std::endl;
 }
 
-template<class _TPar>
-void SDomain_2<_TPar>::integrate(double eta, double v0) {
+template<typename _TPar, typename _TCell>
+void SDomain_2<_TPar, _TCell>::integrate(double eta, double v0) {
   for (int i = 0; i < nPar; i++) {
     p_arr[i].move(eta, v0, myran, pbc);
   }
-  cell_list.recreate();
+  cell_list.recreate(p_arr);
 }
 
-template<class _TPar>
-void SDomain_2<_TPar>::integrate2(double eta, double v0) {
+template<typename _TPar, typename _TCell>
+void SDomain_2<_TPar, _TCell>::integrate2(double eta, double v0) {
   auto move = [this, eta, v0](_TPar *p) {
     p->move(eta, v0, myran, pbc);
   };
   cell_list.update(move);
 }
 
-template<class _TPar>
-inline void SDomain_2<_TPar>::cal_order_para(double & phi, double & theta) const {
+template<class _TPar, typename _TCell>
+inline void SDomain_2<_TPar, _TCell>::cal_order_para(double & phi, double & theta) const {
   func_order_para(p_arr, phi, theta);
 }
 
