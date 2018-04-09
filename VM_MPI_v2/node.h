@@ -18,14 +18,15 @@ public:
     *head = this;
   }
 
-  void break_away(UniNode<_TPar> **head, UniNode<_TPar> *pre_node);
+  void break_away(UniNode<_TPar> *pre_node) const { pre_node->next = next; }
+  void break_away(UniNode<_TPar> **head, UniNode<_TPar> *pre_node) const;
   
   UniNode *next;
 };
 
 template<class _TPar>
 inline void UniNode<_TPar>::break_away(UniNode<_TPar>** head,
-                                       UniNode<_TPar>* pre_node) {
+                                       UniNode<_TPar>* pre_node) const {
   if (pre_node) {
     pre_node->next = next;
   } else {
@@ -34,27 +35,29 @@ inline void UniNode<_TPar>::break_away(UniNode<_TPar>** head,
 }
 
 template <class _TPar>
-class BNode : public _TPar {
+class BiNode : public _TPar {
 public:
-  BNode() : Par1(), prev(nullptr), next(nullptr) {}
-  BNode(double x0, double y0, double vx0, double vy0) :
+  BiNode() : _TPar(), prev(nullptr), next(nullptr) {}
+  BiNode(double x0, double y0, double vx0, double vy0) :
     _TPar(x0, y0, vx0, vy0), prev(nullptr), next(nullptr) {}
-  BNode(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) :
+  BiNode(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) :
     _TPar(myran, Lx, Ly, x0, y0), prev(nullptr), next(nullptr) {}
-  void append_at_front(BNode<_TPar> ** head);
+  void append_at_front(BiNode<_TPar> ** head);
 
-  void break_away(BNode<_TPar> **head) const;
+  void break_away() const;
 
-  void break_away(BNode<_TPar> **head, BNode<_TPar> *pre_node) {
+  void break_away(BiNode<_TPar> **head) const;
+
+  void break_away(BiNode<_TPar> **head, BiNode<_TPar> *pre_node) const {
     break_away(head);
   }
 
-  BNode *prev;
-  BNode *next;
+  BiNode *prev;
+  BiNode *next;
 };
 
 template <class _TPar>
-inline void BNode<_TPar>::append_at_front(BNode<_TPar> ** head) {
+inline void BiNode<_TPar>::append_at_front(BiNode<_TPar> ** head) {
   prev = nullptr;
   next = *head;
   if (next) {
@@ -63,14 +66,18 @@ inline void BNode<_TPar>::append_at_front(BNode<_TPar> ** head) {
   *head = this;
 }
 
+template<class _TPar>
+inline void BiNode<_TPar>::break_away() const {
+  prev->next = next;
+  if (next) {
+    next->prev = prev;
+  }
+}
 
 template<class _TPar>
-inline void BNode<_TPar>::break_away(BNode<_TPar>** head) const {
+inline void BiNode<_TPar>::break_away(BiNode<_TPar>** head) const {
   if (prev) {
-    prev->next = next;
-    if (next) {
-      next->prev = prev;
-    }
+    break_away();
   } else {
     *head = next;
     if (next) {
@@ -129,59 +136,5 @@ void for_each_node_pair(const std::list<_TPar *> &cl1,
   }
 }
 
-template <class _TNode>
-void del_list(std::vector<_TNode *> &list_arr) {
-  auto end = list_arr.end();
-  for (auto it = list_arr.begin(); it != end; ++it) {
-    *it = nullptr;
-  }
-}
-
-template <class _TPar>
-void del_list(std::vector<std::list<_TPar *>> &list_arr) {
-  auto end = list_arr.end();
-  for (auto it = list_arr.begin(); it != end; ++it) {
-    (*it).clear();
-  }
-}
-
-template <class T>
-inline bool not_empty(const T * ptr) {
-  return ptr != nullptr;
-}
-
-template <class T>
-inline bool not_empty(const std::list<T *> &l) {
-  return !l.empty();
-}
-
-template <class T>
-inline void merge_list(UniNode<T> **head, UniNode<T> **tail, UniNode<T> **head_tmp) {
-  if (*head_tmp) {
-    if (*head) {
-      (*tail)->next = *head_tmp;
-    } else {
-      *head = *head_tmp;
-    }
-    *head_tmp = nullptr;
-  }
-  *tail = nullptr;
-}
-
-template <class T>
-inline void merge_list(BNode<T> **head, BNode<T> **tail, BNode<T> **head_tmp) {
-  if (*head_tmp) {
-    if (*head) {
-      (*tail)->next = *head_tmp;
-      (*head_tmp)->prev = *tail; 
-    } else {
-      *head = *head_tmp;
-    }
-    *head_tmp = nullptr;
-  }
-  *tail = nullptr;
-}
 
 #endif
-
-

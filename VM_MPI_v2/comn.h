@@ -11,6 +11,10 @@
 #include <iomanip>
 #include <vector>
 #include <string>
+#include <cstring>
+#include <ctime>
+#include <chrono>
+#include <algorithm>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -53,6 +57,17 @@ double cal_packing_fraction_2(int n, double Lx, double Ly, double sigma);
 // Calculate particle number from packing fraction
 int cal_particle_number_2(double phi, double Lx, double Ly, double sigma);
 
+// Calculate the elapsed time to run a function
+template <typename _TFunc>
+void cal_elapsed_time(_TFunc f) {
+  auto t1 = std::chrono::system_clock::now();
+  f();
+  auto t2 = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_time = t2 - t1;
+  std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
+
+}
+
 //#define SPATIAL_SORT
 #ifdef SPATIAL_SORT
 #include <CGAL/spatial_sort.h>
@@ -87,5 +102,4 @@ struct MySpatialSortingTraits {
 #endif
 
 #endif
-
 

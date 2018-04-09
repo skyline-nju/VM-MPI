@@ -101,68 +101,6 @@ void Par1::move(double eta, double v0, Ran &myran, const BondaryCondi &bc,
   bc.wrap(*this);
 }
 
-class Node: public Par1 {
-public:
-  Node() : Par1(), next(nullptr) {}
-  Node(double x0, double y0, double vx0, double vy0) :
-    Par1(x0, y0, vx0, vy0), next(nullptr) {}
-  Node(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) :
-    Par1(myran, Lx, Ly, x0, y0), next(nullptr) {}
-
-  Node *next;
-};
-
-class BiNode : public Par1 {
-public:
-  BiNode() : Par1(), prev(nullptr), next(nullptr) {}
-  BiNode(double x0, double y0, double vx0, double vy0) :
-    Par1(x0, y0, vx0, vy0), prev(nullptr), next(nullptr) {}
-  BiNode(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) :
-    Par1(myran, Lx, Ly, x0, y0), prev(nullptr), next(nullptr) {}
-
-  BiNode* append_front(BiNode *head);
-
-  void append_front(BiNode **head);
-
-  void break_away(BiNode **head) const;
-
-  BiNode *prev;
-  BiNode *next;
-};
-
-inline BiNode* BiNode::append_front(BiNode *head) {
-  prev = nullptr;
-  next = head;
-  if (head) {
-    head->prev = this;
-  }
-  return this;
-}
-
-inline void BiNode::append_front(BiNode **head) {
-  prev = nullptr;
-  next = *head;
-  if (next) {
-    next->prev = this;
-  }
-  *head = this;
-}
-
-inline void BiNode::break_away(BiNode **head) const {
-  if (prev) {
-    prev->next = next;
-    if (next) {
-      next->prev = prev;
-    }
-  } else {
-    *head = next;
-    if (next) {
-      next->prev = nullptr;
-    }
-  }
-}
-
-
 template <class _TPar>
 void func_order_para(const std::vector<_TPar> &p_arr, double &phi, double &theta) {
   double svx = 0;
