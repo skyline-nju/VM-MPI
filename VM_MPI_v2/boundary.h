@@ -2,128 +2,101 @@
 #define BOUNDARY_H
 #include "vect.h"
 #include <iostream>
-class PBC_X_2 {
+
+template <typename _T1, typename _T2, typename _TBC>
+inline double get_dis_square(const _T1 &p1, const _T2 &p2, const _TBC &bc) {
+  Vec_2<double> dis(p1.x - p2.x, p1.y - p2.y);
+  bc.nearest_dis(dis);
+  return dis.square();
+}
+
+class BoundaryBase_2 {
 public:
-  PBC_X_2() {}
-  PBC_X_2(double Lx0) : Lx(Lx0), half_Lx(0.5 * Lx) {}
-
-  void ini(double Lx0);
-
-  template <class Par1, class Par2>
-  double nearest_dis_square(const Par1 &p1, const Par2 &p2) const;
-
-  template <class Par>
-  void wrap(Par &p) const;
-
-
+  BoundaryBase_2() {}
+  BoundaryBase_2(double Lx0, double Ly0, double x0 = 0, double y0 = 0) :
+    Lx(Lx0), Ly(Ly0), x_min(x0), y_min(y0) {}
+  void ini(double Lx0, double Ly0, double x0=0, double y0=0);
+  double get_Lx() const { return Lx; }
+  double get_Ly() const { return Ly; }
 protected:
   double Lx;
-  double half_Lx;
+  double Ly;
+  double x_min;
+  double y_min;
 };
 
-inline void PBC_X_2::ini(double Lx0) {
-  Lx = Lx0;
-  half_Lx = 0.5 * Lx0;
-}
-
-template<class Par1, class Par2>
-inline double PBC_X_2::nearest_dis_square(const Par1 &p1, const Par2 &p2) const {
-  double dx = p2.x - p1.x;
-  if (dx < -half_Lx) {
-    dx += Lx;
-  } else if (dx > half_Lx) {
-    dx -= Lx;
-  }
-  double dy = p2.y - p1.y;
-  return dx * dx + dy * dy;
-}
-
-template <class Par>
-inline void PBC_X_2::wrap(Par &p) const {
-  if (p.x < 0) {
-    p.x += Lx;
-  } else if (p.x >= Lx) {
-    p.x -= Lx;
-  }
-
-}
-
-class PBC_2 {
+class PBC_x_2 : public BoundaryBase_2 {
 public:
-  PBC_2() : L(), half_L() {}
-  PBC_2(double Lx, double Ly) :
-    L(Lx, Ly), half_L(0.5 * Lx, 0.5 * Ly) {}
-
-  PBC_2(const Vec_2<double> &L0) :
-    L(L0), half_L(0.5 * L0.x, 0.5 * L0.y) {}
-
-  void ini(double Lx, double Ly);
-
+  PBC_x_2() : BoundaryBase_2() {}
+  PBC_x_2(double Lx0, double Ly0, double x0=0, double y0=0);
+  void ini(double Lx0, double Ly0, double x0 = 0, double y0 = 0);
   void nearest_dis(Vec_2<double> &dis) const;
-
-  template<class Par1, class Par2>
-  void nearest_dis(Vec_2<double> &dis, const Par1 &p1, const Par2 &p2) const;
-
-  template<class Par1, class Par2>
-  double nearest_dis_square(const Par1 &p1, const Par2 &p2) const;
-
-  template <class Par>
-  void wrap(Par &R) const;
-
-  double Lx() const { return L.x; }
-  double Ly() const { return L.y; }
+  template <typename T>
+  void wrap(T &p) const;
 
 protected:
-  Vec_2<double> L;
-  Vec_2<double> half_L;
+  double half_Lx;
+  double x_max;
+
 };
 
-inline void PBC_2::ini(double Lx, double Ly) {
-  L.x = Lx;
-  L.y = Ly;
-  half_L.x = 0.5 * Lx;
-  half_L.y = 0.5 * Ly;
-}
-
-inline void PBC_2::nearest_dis(Vec_2<double> &dis) const {
-  if (dis.x < -half_L.x) {
-    dis.x += L.x;
-  } else if (dis.x > half_L.x) {
-    dis.x -= L.x;
-  }
-  if (dis.y < -half_L.y) {
-    dis.y += L.y;
-  } else if (dis.y > half_L.y) {
-    dis.y -= L.y;
+inline void PBC_x_2::nearest_dis(Vec_2<double> &dis) const {
+  if (dis.x < -half_Lx) {
+    dis.x += Lx;
+  } else if (dis.x > half_Lx) {
+    dis.x -= Lx;
   }
 }
 
-template<class Par1, class Par2>
-inline void PBC_2::nearest_dis(Vec_2<double>& dis,
-  const Par1 & p1, const Par2 & p2) const {
-  dis.x = p1.x - p2.x;
-  dis.y = p1.y - p2.y;
-  return nearest_dis(dis);
-}
-
-template<class Par1, class Par2>
-inline double PBC_2::nearest_dis_square(const Par1 &p1, const Par2 &p2) const {
-  Vec_2<double> dR(p1.x - p2.x, p1.y - p2.y);
-  nearest_dis(dR);
-  return dR.square();
-}
-
-template <class Par>
-inline void PBC_2::wrap(Par &R) const {
-  if (R.x < 0) {
-    R.x += L.x;
-  } else if (R.x >= L.x) {
-    R.x -= L.x;
+template <typename T>
+void PBC_x_2::wrap(T &p) const {
+  if (p.x < x_min) {
+    p.x += Lx;
+  } else if (p.x >= x_max) {
+    p.x -= Lx;
   }
-  if (R.y < 0) {
-    R.y += L.y;
-  } else if (R.y >= L.y) {
-    R.y -= L.y;
+}
+
+class PBC_xy_2 : public BoundaryBase_2 {
+public:
+  PBC_xy_2() : BoundaryBase_2() {}
+  PBC_xy_2(double Lx0, double Ly0);
+  void ini(double Lx0, double Ly0, double x0 = 0, double y0 = 0);
+  void nearest_dis(Vec_2<double> &dis) const;
+  template <typename T>
+  void wrap(T &p) const;
+
+protected:
+  double half_Lx;
+  double half_Ly;
+  double x_max;
+  double y_max;
+};
+
+inline void PBC_xy_2::nearest_dis(Vec_2<double> &dis) const {
+  if (dis.x < -half_Lx) {
+    dis.x += Lx;
+  } else if (dis.x > half_Lx) {
+    dis.x -= Lx;
+  }
+  if (dis.y < -half_Ly) {
+    dis.y += Ly;
+  } else if (dis.y > half_Ly) {
+    dis.y -= Ly;
+  }
+}
+
+template<typename T>
+inline void PBC_xy_2::wrap(T & p) const {
+  if (p.x < x_min) {
+    p.x += Lx;
+  } else if (p.x >= x_max) {
+    p.x -= Lx;
+  }
+  if (p.y < x_min) {
+    p.y += Ly;
+  } else if (p.y >= x_max) {
+    p.y -= Ly;
   }
 }
 #endif

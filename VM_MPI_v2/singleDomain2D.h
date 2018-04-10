@@ -21,7 +21,7 @@ public:
 private:
   Ran myran;
   Cell_list_2<_TNode> cell_list;
-  PBC_2 pbc;
+  PBC_xy_2 pbc;
   std::vector<_TNode> p_arr;
   Vec_2<double> domain_size;
 

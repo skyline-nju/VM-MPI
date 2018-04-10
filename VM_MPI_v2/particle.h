@@ -3,13 +3,17 @@
 #include "rand.h"
 #include "comn.h"
 #include "vect.h"
+#include "boundary.h"
 
-class Par1 {
+/****************************************************************************/
+/********************* Class for Vicske-style particle **********************/
+/****************************************************************************/
+class VicsekPar {
 public:
-  Par1() {}
-  Par1(double x0, double y0, double vx0, double vy0) :
+  VicsekPar() {}
+  VicsekPar(double x0, double y0, double vx0, double vy0) :
     x(x0), y(y0), vx(vx0), vy(vy0), vx_next(vx0), vy_next(vy0) {}
-  Par1(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) {
+  VicsekPar(Ran &myran, double Lx, double Ly, double x0 = 0, double y0 = 0) {
     create_rand(myran, Lx, Ly, x0, y0);
   }
   
@@ -36,7 +40,7 @@ public:
   double vy_next;
 };
 
-inline void Par1::create_rand(Ran &myran, double Lx, double Ly,
+inline void VicsekPar::create_rand(Ran &myran, double Lx, double Ly,
                               double x0, double y0) {
   x = x0 + myran.doub() * Lx;
   y = y0 + myran.doub() * Ly;
@@ -46,8 +50,8 @@ inline void Par1::create_rand(Ran &myran, double Lx, double Ly,
 }
 
 template <class Par, class BondaryCondi>
-inline void Par1::interact(Par &p, const BondaryCondi &bc) {
-  if (bc.nearest_dis_square(*this, p) < 1) {
+inline void VicsekPar::interact(Par &p, const BondaryCondi &bc) {
+  if (get_dis_square(*this, p, bc) < 1) {
     vx_next += p.vx;
     vy_next += p.vy;
     p.vx_next += vx;
@@ -56,8 +60,8 @@ inline void Par1::interact(Par &p, const BondaryCondi &bc) {
 }
 
 template <class Par, class BondaryCondi>
-inline void Par1::interact(Par &p, const BondaryCondi &bc, int &count) {
-  if (bc.nearest_dis_square(*this, p) < 1) {
+inline void VicsekPar::interact(Par &p, const BondaryCondi &bc, int &count) {
+  if (get_dis_square(*this, p, bc) < 1) {
     vx_next += p.vx;
     vy_next += p.vy;
     p.vx_next += vx;
@@ -67,7 +71,7 @@ inline void Par1::interact(Par &p, const BondaryCondi &bc, int &count) {
 }
 
 template <class BondaryCondi>
-void Par1::move(double eta, double v0, Ran &myran, const BondaryCondi &bc) {
+void VicsekPar::move(double eta, double v0, Ran &myran, const BondaryCondi &bc) {
   double tmp = std::sqrt(vx_next * vx_next + vy_next * vy_next);
   double c1 = vx_next / tmp;
   double s1 = vy_next / tmp;
@@ -82,7 +86,7 @@ void Par1::move(double eta, double v0, Ran &myran, const BondaryCondi &bc) {
 }
 
 template <class BondaryCondi>
-void Par1::move(double eta, double v0, Ran &myran, const BondaryCondi &bc,
+void VicsekPar::move(double eta, double v0, Ran &myran, const BondaryCondi &bc,
   Vec_2<int> &d_cell) {
   double tmp = std::sqrt(vx_next * vx_next + vy_next * vy_next);
   double c1 = vx_next / tmp;
@@ -113,4 +117,5 @@ void func_order_para(const std::vector<_TPar> &p_arr, double &phi, double &theta
   phi = std::sqrt(svx * svx + svy * svy) / nPar;
   theta = std::atan2(svy, svx);
 }
+/* End of class VicsekPar */
 #endif

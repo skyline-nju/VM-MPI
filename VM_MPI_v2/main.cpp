@@ -31,19 +31,19 @@ int main(int argc, char* argv[]) {
   int t_sep = 100;
 
   {
-    Single_domain_2<BiNode<Par1>> s(L, L, rho0, seed);
+    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
     s.ini_rand();
     s.eval_elapsed_time(eta, n_step, t_start, t_sep, 1);
   }
 
   {
-    Single_domain_2<BiNode<Par1>> s(L, L, rho0, seed);
+    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
     s.ini_rand();
     s.eval_elapsed_time(eta, n_step, t_start, t_sep, 3);
   }
 
   {
-    Single_domain_2<BiNode<Par1>> s(L, L, rho0, seed);
+    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
     s.ini_rand();
     s.eval_elapsed_time(eta, n_step, t_start, t_sep, 2);
   }
