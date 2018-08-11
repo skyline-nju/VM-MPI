@@ -33,7 +33,7 @@ template<class Par, class BoundayCondi>
 void VicsekPar_3::interact(Par & p, const BoundayCondi & bc) {
   if(get_dis_square(this->pos, p.pos, bc) < 1) {
     ori_next += p.ori;
-    ori += p.ori_next;
+    p.ori_next += ori;
   }
 }
 
@@ -43,7 +43,7 @@ void VicsekPar_3::move(double eta, double v0, TRan & myran,
   ori_next.normalize();
   Vec_3<double> ax;
   ori_next.rand_perp_ax(ax, myran);
-  ori_next.rotate((myran.doub() - 0.5) * eta, ax);
+  ori_next.rotate((myran.doub() - 0.5) * eta * PI * 2, ax);
   ori = ori_next;
   pos += v0 * ori;
   bc.wrap(pos);

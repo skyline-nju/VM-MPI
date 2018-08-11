@@ -85,6 +85,5 @@ void SingleDomain_3<TNode>::eval_elapsed_time(double eta, double v0,
   auto t2 = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = t2 - t1;
   std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
+  std::cout << n_step * p_arr_.size() / elapsed_time.count() << std::endl;
 }
-
-

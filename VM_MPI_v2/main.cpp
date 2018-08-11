@@ -24,10 +24,10 @@ int main(int argc, char* argv[]) {
 #ifndef USE_MPI
   double L = 64;
   double rho0 = 1;
-  double eta = 0.1;
+  double eta = 0.2;
   unsigned long long seed = 1;
   int n_step = 10000;
-  int t_start = 2000;
+  int t_start = 0;
   int t_sep = 100;
 
   {
@@ -36,17 +36,17 @@ int main(int argc, char* argv[]) {
     s.eval_elapsed_time(eta, n_step, t_start, t_sep, 1);
   }
 
-  {
-    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
-    s.ini_rand();
-    s.eval_elapsed_time(eta, n_step, t_start, t_sep, 3);
-  }
+  //{
+  //  Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
+  //  s.ini_rand();
+  //  s.eval_elapsed_time(eta, n_step, t_start, t_sep, 3);
+  //}
 
-  {
-    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
-    s.ini_rand();
-    s.eval_elapsed_time(eta, n_step, t_start, t_sep, 2);
-  }
+  //{
+  //  Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
+  //  s.ini_rand();
+  //  s.eval_elapsed_time(eta, n_step, t_start, t_sep, 2);
+  //}
 
 #else
   MPI_Finalize();

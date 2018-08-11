@@ -110,6 +110,7 @@ inline void Single_domain_2<_TNode>::eval_elapsed_time(double eta, int n_steps, 
   std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
   std::cout << "phi: " << phi_mean / count << std::endl;
   std::cout << std::endl;
+  std::cout << n_steps * p_arr.size() / elapsed_time.count() << std::endl;
 }
 
 #endif
