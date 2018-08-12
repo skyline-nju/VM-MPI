@@ -47,8 +47,5 @@
     <ClInclude Include="cellList2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="singleDomain2D.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

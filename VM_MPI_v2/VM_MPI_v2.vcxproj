@@ -156,7 +156,6 @@
     <ClInclude Include="node.h" />
     <ClInclude Include="particle.h" />
     <ClInclude Include="rand.h" />
-    <ClInclude Include="singleDomain2D.h" />
     <ClInclude Include="vect.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

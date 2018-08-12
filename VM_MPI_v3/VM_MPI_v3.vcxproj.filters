@@ -21,6 +21,12 @@
     <ClCompile Include="boundary3D.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="domain3D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="communicator3D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="particle3D.h">
@@ -30,6 +36,12 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="singleDomain3D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="domain3D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="communicator3D.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

@@ -26,7 +26,6 @@ private:
   std::vector<TNode> p_arr_;
 
   int n_par_;
-
 };
 
 template<typename TNode>
