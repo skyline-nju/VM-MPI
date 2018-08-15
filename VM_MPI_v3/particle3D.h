@@ -1,14 +1,17 @@
 #pragma once
 #include "vect.h"
 #include "domain3D.h"
+
 class VicsekPar_3 {
 public:
   VicsekPar_3() = default;
+
   VicsekPar_3(const Vec_3<double> &pos0, const Vec_3<double> &ori0)
     : pos(pos0), ori(ori0), ori_next(ori0) {}
   
   VicsekPar_3(const double* buf)
-    : pos(buf[0], buf[1], buf[2]), ori(buf[3], buf[4], buf[5]), ori_next(ori) { std::cout << "bb" << std::endl; }
+    : pos(buf[0], buf[1], buf[2]), ori(buf[3], buf[4], buf[5]), ori_next(ori) {}
+
   template<typename TRan>
   VicsekPar_3(TRan &myran, const Vec_3<double> &l, const Vec_3<double> &origin);
 
@@ -22,17 +25,11 @@ public:
   template <class Par>
   void interact(Par &p, const Domain_3 &domain);
 
-  template <class Par>
-  void interact(Par &p, const ExtDomain_3 &domain);
-
   template <class TRan>
   void move(double eta, double v0, TRan &myran);
 
   template <class TRan>
   void move(double eta, double v0, TRan &myran, const Domain_3 &domain);
-
-  template <class TRan>
-  void move(double eta, double v0, TRan &myran, const ExtDomain_3 &domain);
 };
 
 template <typename TRan>
@@ -56,17 +53,7 @@ void VicsekPar_3::interact(Par& p) {
 template <class Par>
 void VicsekPar_3::interact(Par& p, const Domain_3& domain) {
   Vec_3<double> dR = pos - p.pos;
-  untangle_3(dR, domain.l(), domain.half_l());
-  if (dR.square() < 1) {
-    ori_next += p.ori;
-    p.ori_next += ori;
-  }
-}
-
-template <class Par>
-void VicsekPar_3::interact(Par& p, const ExtDomain_3& domain) {
-  Vec_3<double> dR = pos - p.pos;
-  untangle_3(dR, domain.l(), domain.half_l(), domain.flag_ext());
+  untangle_3(dR, domain.gl_l(), domain.gl_half_l(), domain.flag_comm());
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
@@ -86,13 +73,7 @@ void VicsekPar_3::move(double eta, double v0, TRan& myran) {
 template <class TRan>
 void VicsekPar_3::move(double eta, double v0, TRan& myran, const Domain_3& domain) {
   move(eta, v0, myran);
-  tangle_3(pos, domain.origin(), domain.end_pnt(), domain.l());
-}
-
-template <class TRan>
-void VicsekPar_3::move(double eta, double v0, TRan& myran, const ExtDomain_3& domain) {
-  move(eta, v0, myran);
-  tangle_3(pos, domain.origin(), domain.end_pnt(), domain.l(), domain.flag_ext());
+  tangle_3(pos, domain.gl_l(), domain.flag_comm());
 }
 
 template <class TPar>

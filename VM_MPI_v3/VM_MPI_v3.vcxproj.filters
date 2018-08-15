@@ -35,5 +35,8 @@
     <ClInclude Include="particle3D.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="run.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

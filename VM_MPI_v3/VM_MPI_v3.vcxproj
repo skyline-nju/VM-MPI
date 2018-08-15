@@ -150,6 +150,7 @@
     <ClInclude Include="communicator3D.h" />
     <ClInclude Include="domain3D.h" />
     <ClInclude Include="particle3D.h" />
+    <ClInclude Include="run.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
