@@ -27,7 +27,6 @@ void divide_domain(int tot, int &nrows, int &ncols) {
   default:
     cout << "np = " << tot << " is wrong!\n";
     exit(1);
-    break;
   }
 }
 

@@ -98,7 +98,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(COMMON_DIR);$(I_MPI_ROOT)\intel64\lib\release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>comn.lib;impi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>impi.lib;comn.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -142,17 +142,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="boundary3D.cpp" />
     <ClCompile Include="communicator3D.cpp" />
     <ClCompile Include="domain3D.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="boundary3D.h" />
     <ClInclude Include="communicator3D.h" />
     <ClInclude Include="domain3D.h" />
     <ClInclude Include="particle3D.h" />
-    <ClInclude Include="singleDomain3D.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
