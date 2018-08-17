@@ -88,16 +88,3 @@ void cal_order_para(const std::vector<TPar> &p_arr,
   phi = v_mean.module();
 }
 
-class VicsekPar_3_w_flag: public VicsekPar_3 {
-public:
-  VicsekPar_3_w_flag(): VicsekPar_3(), flag(false) {}
-  VicsekPar_3_w_flag(const Vec_3<double> &pos, const Vec_3<double> &ori)
-    : VicsekPar_3(pos, ori), flag(false) {}
-  template<typename TRan>
-  VicsekPar_3_w_flag(TRan &myran, const Vec_3<double> &l,
-                     const Vec_3<double> &origin)
-    : VicsekPar_3(myran, l, origin), flag(false) {}
-
-  bool flag;
-};
-

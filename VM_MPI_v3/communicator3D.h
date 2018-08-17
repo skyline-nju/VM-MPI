@@ -9,37 +9,33 @@ struct block_t {
   Vec_3<int> end;
 };
 
-int get_proc_num();
+void find_shell(const Vec_3<int> &n, const Vec_3<int> &thickness,
+                Vec_3<block_t> shell[2]);
 
-int get_proc_rank();
-
-int divide_par_evenly(int gl_np);
-
-void set_comm_block(const Vec_3<int> &cell_size, const Vec_3<bool> &flag_comm);
-
-const Vec_3<block_t>* get_inner_block();
-
-const Vec_3<block_t>* get_outer_block();
+void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
+                    Vec_3<block_t> inner_shell[2], Vec_3<block_t> outer_shell[2]);
 
 template <typename TNode>
 void pack_ghost_par(double *buf, int &buf_size,
-                    const CellListNode_3<TNode>& cl,
+                    CellListNode_3<TNode>& cl,
                     const block_t& block) {
   int pos = 0;
-  auto f_copy = [&pos](const TNode *head) {
-    TNode *cur_node = head;
-    while(cur_node) {
-      buf[pos]     = cur_node->pos.x;
-      buf[pos + 1] = cur_node->pos.y;
-      buf[pos + 2] = cur_node->pos.z;
-      buf[pos + 3] = cur_node->ori.x;
-      buf[pos + 4] = cur_node->ori.y;
-      buf[pos + 5] = cur_node->ori.z;
-      pos += 6;
-      cur_node = cur_node->next;
+  auto f_copy = [&pos, buf](TNode **head) {
+    if (*head) {
+      TNode *cur_node = *head;
+      do {
+        buf[pos]     = cur_node->pos.x;
+        buf[pos + 1] = cur_node->pos.y;
+        buf[pos + 2] = cur_node->pos.z;
+        buf[pos + 3] = cur_node->ori.x;
+        buf[pos + 4] = cur_node->ori.y;
+        buf[pos + 5] = cur_node->ori.z;
+        pos += 6;
+        cur_node = cur_node->next;
+      } while (cur_node);
     }
   };
-  cl.for_each_node(f_copy, block.beg, block.end);
+  cl.for_each_cell(f_copy, block.beg, block.end);
   buf_size = pos;
 }
 
@@ -48,7 +44,8 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       CellListNode_3<TNode>& cl,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
-  const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
+  Vec_3<double> p1(buf[0], buf[1], buf[2]);
+  const Vec_3<double> offset = cl.get_offset(p1);
   const int n_new = buf_size / 6;
   const int n0 = p_arr.size();
   for (int i = 0; i < n_new; i++) {
@@ -61,60 +58,61 @@ void unpack_ghost_par(const double *buf, int buf_size,
 }
 
 template <typename TNode>
-void pack_leave_par(const std::vector<TNode> &p_arr,
-                    std::vector<int> &ip_out,
-                    const CellListNode_3<TNode>& cl,
-                    const block_t &block,
-                    double *buf, int &buf_size) {
-  TNode* p0 = &p_arr[0];
-  int pos = 0;
-  auto f_copy = [&pos](const TNode *head) {
-    TNode *cur_node = head;
-    while (cur_node) {
-      buf[pos]     = cur_node->pos.x;
-      buf[pos + 1] = cur_node->pos.y;
-      buf[pos + 2] = cur_node->pos.z;
-      buf[pos + 3] = cur_node->ori.x;
-      buf[pos + 4] = cur_node->ori.y;
-      buf[pos + 5] = cur_node->ori.z;
-      pos += 6;
-      ip_out.push_back(cur_node - p0);
-      cur_node = cur_node->next;
+void pack_leaving_par(const std::vector<TNode> &p_arr,
+                      std::vector<int> &vacant_pos,
+                      CellListNode_3<TNode>& cl,
+                      const block_t &block,
+                      double *buf, int &buf_size) {
+  const TNode* p0 = &p_arr[0];
+  const int n0 = vacant_pos.size();
+  int buf_pos = 0;
+  auto f_copy = [&buf_pos, &vacant_pos, p0, buf](TNode **head) {
+    if (*head) {
+      TNode *cur_node = *head;
+      do {
+        buf[buf_pos] = cur_node->pos.x;
+        buf[buf_pos + 1] = cur_node->pos.y;
+        buf[buf_pos + 2] = cur_node->pos.z;
+        buf[buf_pos + 3] = cur_node->ori.x;
+        buf[buf_pos + 4] = cur_node->ori.y;
+        buf[buf_pos + 5] = cur_node->ori.z;
+        buf_pos += 6;
+        vacant_pos.push_back(cur_node - p0);
+        cur_node = cur_node->next;
+      } while (cur_node);
+      *head = nullptr;
     }
   };
-  cl.for_each_node_clean(f_copy, block.beg, block.end);
-  buf_size = pos;
+  int count = cl.get_par_num(block.beg, block.end);
+  cl.for_each_cell(f_copy, block.beg, block.end);
+  buf_size = buf_pos;
 }
 
 template <typename TNode>
-void unpack_arrive_par(const double *buf, int buf_size,
-                       CellListNode_3<TNode>& cl,
-                       std::vector<TNode> &p_arr,
-                       std::vector<int> &ip_out_decending) {
+void unpack_arrived_par(const double *buf, int buf_size,
+                        CellListNode_3<TNode>& cl,
+                        std::vector<TNode> &p_arr,
+                        std::vector<int> &vacant_pos) {  //! should be sorted in desending order
   const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
-  const int n_new = buf_size / 6;
-  for (int i = 0; i < n_new; i++) {
-    int idx_new;
-    if (ip_out_decending.empty()) {
-      idx_new = p_arr.size();
-      p_arr.emplace_back(&buf[i * 6]);
+  for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 6) {
+    int idx;
+    if (vacant_pos.empty()) {
+      idx = p_arr.size();
+      p_arr.emplace_back(&buf[buf_pos]);
     } else {
-      idx_new = ip_out_decending.back();
-      p_arr[idx_new] = TNode(&buf[i * 6]);
-      ip_out_decending.pop_back();
+      idx = vacant_pos.back();
+      p_arr[idx] = TNode(&buf[buf_pos]);
+      vacant_pos.pop_back();
     }
-    p_arr[idx_new].pos += offset;
-    cl.add_node(p_arr[idx_new]);
+    p_arr[idx].pos += offset;
+    cl.add_node(p_arr[idx]);
   }
 }
 
 template <typename TPack, typename TUnpack, typename TFunc>
-void par_comm(int direction, int neighbor_proc[3][2],
-              const Vec_3<block_t> block[2], int max_buf_size,
-              TPack pack, TUnpack unpack, TFunc do_something) {
-  int my_rank = get_proc_rank();
-  const int prev_rank = neighbor_proc[direction][0];
-  const int next_rank = neighbor_proc[direction][1];
+void comm_par(int prev_proc, int next_proc,
+              const block_t &prev_block, const block_t &next_block,
+              int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth) {
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];
@@ -124,27 +122,28 @@ void par_comm(int direction, int neighbor_proc[3][2],
     buf_size[i] = max_buf_size;
   }
 
-  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_rank,
-            32, MPI_COMM_WORLD, &req[0]);
-  pack(buf[1], &buf_size[1], block[0][direction]);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_rank,
-            32, MPI_COMM_WORLD, &req[1]);
+  //! transfer data backward
+  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_proc, 32, MPI_COMM_WORLD, &req[0]);
+  pack(buf[1], buf_size[1], prev_block);
+  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_proc, 32, MPI_COMM_WORLD, &req[1]);
+  //! tarnsfer data forward
+  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_proc, 23, MPI_COMM_WORLD, &req[2]);
+  pack(buf[3], buf_size[3], next_block);
+  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, 23, MPI_COMM_WORLD, &req[3]);
+  MPI_Barrier(MPI_COMM_WORLD);
 
-  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_rank,
-            23, MPI_COMM_WORLD, &req[2]);
-  pack(buf[3], &buf_size[3], block[1][direction]);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_rank,
-            23, MPI_COMM_WORLD, &req[3]);
-
-  do_something();
+  //! do something while waiting
+  do_sth();
 
   MPI_Wait(&req[0], &stat[0]);
   MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size[0]);
   unpack(buf[0], buf_size[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
 
   MPI_Wait(&req[2], &stat[2]);
   MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size[2]);
   unpack(buf[2], buf_size[2]);
+  MPI_Barrier(MPI_COMM_WORLD);
 
   MPI_Wait(&req[1], &stat[1]);
   MPI_Wait(&req[3], &stat[3]);
@@ -155,11 +154,14 @@ void par_comm(int direction, int neighbor_proc[3][2],
 }
 
 template <typename TNode>
-void par_comm_before_interact(int neighbor_proc[3][2],
+void comm_par_before_interact(const int neighbor_proc[3][2],
+                              const Vec_3<block_t> inner_shell[2],
                               int max_buf_size,
                               std::vector<TNode> &p_arr,
                               CellListNode_3<TNode> &cl,
                               int& n_ghost) {
+  n_ghost = 0;
+
   auto pack = [&cl](double *buf, int &buf_size, const block_t& block) {
     pack_ghost_par(buf, buf_size, cl, block);
   };
@@ -168,30 +170,32 @@ void par_comm_before_interact(int neighbor_proc[3][2],
     unpack_ghost_par(buf, buf_size, cl, p_arr, n_ghost);
   };
 
-  n_ghost = 0;
-  const Vec_3<block_t> *inner_block = get_inner_block();
   for (int direction = 0; direction < 3; direction++) {
-    if (cl.flag_ext()[direction])
-      par_comm(direction, neighbor_proc, inner_block, max_buf_size,
-               pack, unpack, [](){});
+    if (cl.flag_ext()[direction]) {
+      const int prev_proc = neighbor_proc[direction][0];
+      const int next_proc = neighbor_proc[direction][1];
+      const auto & prev_block = inner_shell[0][direction];
+      const auto & next_block = inner_shell[1][direction];
+      comm_par(prev_proc, next_proc, prev_block, next_block,
+               max_buf_size, pack, unpack, []() {});
+    }
   }
 }
 
 template <typename TNode>
-void clear_after_interact(CellListNode_3<TNode> &cl,
-  std::vector<TNode> &p_arr, int n_ghost) {
-  const Vec_3<block_t> *outer_block = get_outer_block();
+void clear_ghost_after_interact(CellListNode_3<TNode> &cl,
+                                const Vec_3<block_t> outer_shell[2],
+                                std::vector<TNode> &p_arr, int n_ghost) {
   for (int dim = 0; dim < 3; dim++) {
     if (cl.flag_ext()[dim]) {
-      cl.clear(outer_block[0][dim].beg, outer_block[0][dim].end);
-      cl.clear(outer_block[1][dim].beg, outer_block[1][dim].end);
+      cl.clear(outer_shell[0][dim].beg, outer_shell[0][dim].end);
+      cl.clear(outer_shell[1][dim].beg, outer_shell[1][dim].end);
     }
   }
   for (int i = 0; i < n_ghost; i++) {
     p_arr.pop_back();
   }
 }
-
 
 template <typename TPar>
 void make_compact(std::vector<BiNode<TPar>> &p_arr,
@@ -227,28 +231,35 @@ void make_compact(std::vector<T> &arr,
 }
 
 template <typename TNode>
-void par_comm_after_move(int neighbor_proc[3][2],
+void comm_par_after_move(const int neighbor_proc[3][2],
+                         const Vec_3<block_t> outer_shell[2],
                          int max_buf_size,
                          std::vector<TNode> &p_arr,
                          CellListNode_3<TNode>& cl) {
   std::vector<int> vacant_pos;
-  vacant_pos.reserve(max_buf_size * 6);
+  vacant_pos.reserve(max_buf_size);
   auto pack = [&p_arr, &vacant_pos, &cl](double *buf, int &buf_size, const block_t& block) {
-    pack_leave_par(p_arr, vacant_pos, cl, block, buf, buf_size);
+    pack_leaving_par(p_arr, vacant_pos, cl, block, buf, buf_size);
   };
 
   auto unpack = [&p_arr, &vacant_pos, &cl](double *buf, int buf_size) {
-    unpack_arrive_par(buf, buf_size, cl, p_arr, vacant_pos);
+    unpack_arrived_par(buf, buf_size, cl, p_arr, vacant_pos);
   };
 
   auto sort_desending = [&vacant_pos]() {
     std::sort(vacant_pos.begin(), vacant_pos.end(), std::greater<int>());
   };
-  const Vec_3<block_t> *outer_block = get_outer_block();
-  for (int direction = 2; direction > -1; direction--) {
-    if (cl.flag_ext()[direction])
-      comm(direction, neighbor_proc, outer_block, max_buf_size,
-           pack, unpack, sort_desending);
+
+  for (int direction = 0; direction < 3; direction++) {
+    if (cl.flag_ext()[direction]) {
+      const int prev_proc = neighbor_proc[direction][0];
+      const int next_proc = neighbor_proc[direction][1];
+      const auto & prev_block = outer_shell[0][direction];
+      const auto & next_block = outer_shell[1][direction];
+      comm_par(prev_proc, next_proc, prev_block, next_block,
+               max_buf_size, pack, unpack, sort_desending);
+    }
   }
+
   make_compact(p_arr, vacant_pos, cl);
 }

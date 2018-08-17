@@ -145,6 +145,7 @@
     <ClCompile Include="communicator3D.cpp" />
     <ClCompile Include="domain3D.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="run.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="communicator3D.h" />
