@@ -4,6 +4,34 @@
 
 int ini_my_par_num(int gl_par_num);
 
+template <class TPar>
+void cal_order_para(const std::vector<TPar> &p_arr,double &phi, Vec_3<double> &v_mean) {
+  Vec_3 <double> sum_v{};
+  auto end = p_arr.cend();
+  for (auto it = p_arr.cbegin(); it != end; ++it) {
+    sum_v += (*it).ori;
+  }
+#ifdef USE_MPI
+  Vec_3<double> gl_sum_v{};
+  int my_np = p_arr.size();
+  int gl_np;
+  MPI_Reduce(&sum_v.x, &gl_sum_v.x, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&my_np, &gl_np, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
+    v_mean = gl_sum_v / gl_np;
+    phi = v_mean.module();
+    std::cout << "phi = " << phi << "\tori =\t" << v_mean
+              << "\tN = " << gl_np  << std::endl;
+  }
+#else
+  v_mean = sum_v / p_arr.size();
+  phi = v_mean.module();
+  std::cout << "phi = " << phi << "\t" << "ori = " << v_mean << std::endl;
+#endif
+}
+
 template <typename TNode, typename TRan>
 void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
               CellListNode_3<TNode>& cl, Domain_3 &dm) {
@@ -29,12 +57,10 @@ void cal_force(std::vector<TNode> &p_arr,
   comm_par_before_interact(dm.neighbor, dm.inner_shell, dm.max_buf_size(),
     p_arr, cl, n_ghost);
 #endif
-
   auto f_ij = [&dm](TNode *pi, TNode *pj) {
     pi->interact(*pj, dm);
   };
   cl.for_each_pair(f_ij);
-
 #ifdef USE_MPI
   clear_ghost_after_interact(cl, dm.outer_shell, p_arr, n_ghost);
 #endif
@@ -53,6 +79,9 @@ void integrate(std::vector<TNode>& p_arr, TRan& myran,
 #ifdef USE_MPI
   comm_par_after_move(dm.neighbor, dm.outer_shell, dm.max_buf_size(), p_arr, cl);
 #endif
+  //int my_rank;
+  //MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  //std::cout << "proc=" << my_rank << "\t" << p_arr.size() << std::endl;
 }
 
 template <typename TNode, typename TInteract, typename TIntegrate>
@@ -61,20 +90,29 @@ void run(std::vector<TNode> &p_arr, TInteract interact,
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   auto t1 = std::chrono::system_clock::now();
+  double phi_sum = 0;
+  int count = 0;
   for (int i = 1; i <= n_step; i++) {
-    MPI_Barrier(MPI_COMM_WORLD);
+    
     interact(p_arr);
+
     integrate(p_arr);
+
     if (i % sep == 0) {
-      double phi;
+      double phi = 0;
       Vec_3<double> v_mean{};
       cal_order_para(p_arr, phi, v_mean);
-      std::cout << phi << "\t" << v_mean << std::endl;
+      if (i > 10000) {
+        phi_sum += phi;
+        count++;
+      }
     }
   }
   auto t2 = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = t2 - t1;
   std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
   std::cout << n_step * p_arr.size() / elapsed_time.count() << std::endl;
+  //if (my_rank == 0)
+  //  std::cout << "phi = " << phi_sum / count << std::endl;
 }
 

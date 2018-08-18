@@ -9,6 +9,8 @@ struct block_t {
   Vec_3<int> end;
 };
 
+void test_comm_velocity();
+
 void find_shell(const Vec_3<int> &n, const Vec_3<int> &thickness,
                 Vec_3<block_t> shell[2]);
 
@@ -24,13 +26,7 @@ void pack_ghost_par(double *buf, int &buf_size,
     if (*head) {
       TNode *cur_node = *head;
       do {
-        buf[pos]     = cur_node->pos.x;
-        buf[pos + 1] = cur_node->pos.y;
-        buf[pos + 2] = cur_node->pos.z;
-        buf[pos + 3] = cur_node->ori.x;
-        buf[pos + 4] = cur_node->ori.y;
-        buf[pos + 5] = cur_node->ori.z;
-        pos += 6;
+        cur_node->copy(buf, pos);
         cur_node = cur_node->next;
       } while (cur_node);
     }
@@ -44,7 +40,7 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       CellListNode_3<TNode>& cl,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
-  Vec_3<double> p1(buf[0], buf[1], buf[2]);
+  Vec_3<double> p1(Vec_3<double>(buf[0], buf[1], buf[2]));
   const Vec_3<double> offset = cl.get_offset(p1);
   const int n_new = buf_size / 6;
   const int n0 = p_arr.size();
@@ -64,26 +60,18 @@ void pack_leaving_par(const std::vector<TNode> &p_arr,
                       const block_t &block,
                       double *buf, int &buf_size) {
   const TNode* p0 = &p_arr[0];
-  const int n0 = vacant_pos.size();
   int buf_pos = 0;
   auto f_copy = [&buf_pos, &vacant_pos, p0, buf](TNode **head) {
     if (*head) {
       TNode *cur_node = *head;
       do {
-        buf[buf_pos] = cur_node->pos.x;
-        buf[buf_pos + 1] = cur_node->pos.y;
-        buf[buf_pos + 2] = cur_node->pos.z;
-        buf[buf_pos + 3] = cur_node->ori.x;
-        buf[buf_pos + 4] = cur_node->ori.y;
-        buf[buf_pos + 5] = cur_node->ori.z;
-        buf_pos += 6;
+        cur_node->copy(buf, buf_pos);
         vacant_pos.push_back(cur_node - p0);
         cur_node = cur_node->next;
       } while (cur_node);
       *head = nullptr;
     }
   };
-  int count = cl.get_par_num(block.beg, block.end);
   cl.for_each_cell(f_copy, block.beg, block.end);
   buf_size = buf_pos;
 }
@@ -110,7 +98,7 @@ void unpack_arrived_par(const double *buf, int buf_size,
 }
 
 template <typename TPack, typename TUnpack, typename TFunc>
-void comm_par(int prev_proc, int next_proc,
+void comm_par(int prev_proc, int next_proc, int tag_bw, int tag_fw,
               const block_t &prev_block, const block_t &next_block,
               int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth) {
   MPI_Request req[4];
@@ -123,14 +111,14 @@ void comm_par(int prev_proc, int next_proc,
   }
 
   //! transfer data backward
-  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_proc, 32, MPI_COMM_WORLD, &req[0]);
+  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_proc, tag_bw, MPI_COMM_WORLD, &req[0]);
   pack(buf[1], buf_size[1], prev_block);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_proc, 32, MPI_COMM_WORLD, &req[1]);
+  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_proc, tag_bw, MPI_COMM_WORLD, &req[1]);
   //! tarnsfer data forward
-  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_proc, 23, MPI_COMM_WORLD, &req[2]);
+  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_proc, tag_fw, MPI_COMM_WORLD, &req[2]);
   pack(buf[3], buf_size[3], next_block);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, 23, MPI_COMM_WORLD, &req[3]);
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, tag_fw, MPI_COMM_WORLD, &req[3]);
+
 
   //! do something while waiting
   do_sth();
@@ -138,12 +126,10 @@ void comm_par(int prev_proc, int next_proc,
   MPI_Wait(&req[0], &stat[0]);
   MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size[0]);
   unpack(buf[0], buf_size[0]);
-  MPI_Barrier(MPI_COMM_WORLD);
 
   MPI_Wait(&req[2], &stat[2]);
   MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size[2]);
   unpack(buf[2], buf_size[2]);
-  MPI_Barrier(MPI_COMM_WORLD);
 
   MPI_Wait(&req[1], &stat[1]);
   MPI_Wait(&req[3], &stat[3]);
@@ -176,7 +162,7 @@ void comm_par_before_interact(const int neighbor_proc[3][2],
       const int next_proc = neighbor_proc[direction][1];
       const auto & prev_block = inner_shell[0][direction];
       const auto & next_block = inner_shell[1][direction];
-      comm_par(prev_proc, next_proc, prev_block, next_block,
+      comm_par(prev_proc, next_proc, 13, 31, prev_block, next_block,
                max_buf_size, pack, unpack, []() {});
     }
   }
@@ -199,34 +185,36 @@ void clear_ghost_after_interact(CellListNode_3<TNode> &cl,
 
 template <typename TPar>
 void make_compact(std::vector<BiNode<TPar>> &p_arr,
-                  std::vector<int> &vacant_pos,          //! in desending order
+                  std::vector<int> &vacancy,          //! in desending order
                   CellListNode_3<BiNode<TPar>> &cl) {
   int k = 0;
-  while(k < vacant_pos.size()) {
-    while (p_arr.size() - 1 == vacant_pos[k]) {
+  while (k < vacancy.size()) {
+    if (p_arr.size() - 1 == vacancy[k]) {
       p_arr.pop_back();
       k++;
+    } else {
+      auto i = vacancy.back();
+      cl.replace(p_arr[i], p_arr.back());
+      p_arr.pop_back();
+      vacancy.pop_back();
     }
-    auto first_vac_pos = vacant_pos.back();
-    cl.replace(p_arr[first_vac_pos], p_arr.back());
-    p_arr.pop_back();
-    vacant_pos.pop_back();
   }
 }
 
 template <typename T>
 void make_compact(std::vector<T> &arr,
-                  std::vector<int> &vacant_pos) {
+                  std::vector<int> &vacancy) {
   int k = 0;
-  while (k < vacant_pos.size()) {
-    while (arr.size() - 1 == vacant_pos[k]) {
+  while (k < vacancy.size()) {
+    if (arr.size() - 1 == vacancy[k]) {
       arr.pop_back();
       k++;
+    } else {
+      auto i = vacancy.back();
+      arr[i] = arr.back();
+      arr.pop_back();
+      vacancy.pop_back();
     }
-    auto first_vac_pos = vacant_pos.back();
-    arr[first_vac_pos] = arr.back();
-    arr.pop_back();
-    vacant_pos.pop_back();
   }
 }
 
@@ -256,7 +244,7 @@ void comm_par_after_move(const int neighbor_proc[3][2],
       const int next_proc = neighbor_proc[direction][1];
       const auto & prev_block = outer_shell[0][direction];
       const auto & next_block = outer_shell[1][direction];
-      comm_par(prev_proc, next_proc, prev_block, next_block,
+      comm_par(prev_proc, next_proc, 24, 42, prev_block, next_block,
                max_buf_size, pack, unpack, sort_desending);
     }
   }

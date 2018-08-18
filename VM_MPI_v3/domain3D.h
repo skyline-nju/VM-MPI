@@ -63,7 +63,7 @@ Domain_3::Domain_3(const Vec3d& gl_l, CellListNode_3<TNode>** cl, double r_cut)
   Vec_3<int> gl_cells_size{};
   Vec_3<int> cells_size{};
   Vec_3<double> cell_len{};
-  cells_partition(gl_l_, r_cut, gl_cells_size, cell_len);
+  CellListNode_3<TNode>::partition(gl_l_, r_cut, gl_cells_size, cell_len);
   find_neighbor(rank_, flag_comm_, neighbor);
   set_l(gl_cells_size, cells_size, l_, origin_);
   set_comm_block(cells_size, flag_comm_, inner_shell, outer_shell);

@@ -30,6 +30,8 @@ public:
 
   template <class TRan>
   void move(double eta, double v0, TRan &myran, const Domain_3 &domain);
+
+  void copy(double* dest, int& idx) const;
 };
 
 template <typename TRan>
@@ -76,15 +78,15 @@ void VicsekPar_3::move(double eta, double v0, TRan& myran, const Domain_3& domai
   tangle_3(pos, domain.gl_l(), domain.flag_comm());
 }
 
-template <class TPar>
-void cal_order_para(const std::vector<TPar> &p_arr,
-                    double &phi, Vec_3<double> &v_mean) {
-  Vec_3<double> sum_v{};
-  auto end = p_arr.cend();
-  for (auto it = p_arr.cbegin(); it != end; ++it) {
-    sum_v += (*it).ori;
-  }
-  v_mean = sum_v / p_arr.size();
-  phi = v_mean.module();
+
+
+inline void VicsekPar_3::copy(double *dest, int &idx) const {
+  dest[idx]     = pos.x;
+  dest[idx + 1] = pos.y;
+  dest[idx + 2] = pos.z;
+  dest[idx + 3] = ori.x;
+  dest[idx + 4] = ori.y;
+  dest[idx + 5] = ori.z;
+  idx += 6;
 }
 

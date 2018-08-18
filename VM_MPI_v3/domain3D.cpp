@@ -144,7 +144,9 @@ Vec_3<int> Domain_3::partition(const Vec3d& l) {
 #ifdef USE_MPI
   int tot_proc;
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-  return partition(l, tot_proc);
+  Vec_3<int> domains_size = partition(l, tot_proc);
+  std::cout << "domains size = " << domains_size << std::endl;
+  return domains_size;
 #else
   return Vec3i(1, 1, 1);
 #endif
