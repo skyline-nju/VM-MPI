@@ -40,15 +40,19 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       CellListNode_3<TNode>& cl,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
-  Vec_3<double> p1(Vec_3<double>(buf[0], buf[1], buf[2]));
-  const Vec_3<double> offset = cl.get_offset(p1);
+  const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
   const int n_new = buf_size / 6;
   const int n0 = p_arr.size();
-  for (int i = 0; i < n_new; i++) {
-    int ip = i + n0;
-    p_arr.emplace_back(&buf[i * 6]);
-    p_arr[ip].pos += offset;
-    cl.add_node(p_arr[ip]);
+  for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 6) {
+    auto idx_last = p_arr.size();
+    if (idx_last != p_arr.capacity()) {
+      p_arr.emplace_back(&buf[buf_pos]);
+    } else {
+      std::cerr << "the particle number is larger than the capacity of p_arr" << std::endl;
+      exit(-1);
+    }
+    p_arr[idx_last].pos += offset;
+    cl.add_node(p_arr[idx_last]);
     n_ghost++;
   }
 }
@@ -86,7 +90,12 @@ void unpack_arrived_par(const double *buf, int buf_size,
     int idx;
     if (vacant_pos.empty()) {
       idx = p_arr.size();
-      p_arr.emplace_back(&buf[buf_pos]);
+      if (idx != p_arr.capacity()) {
+        p_arr.emplace_back(&buf[buf_pos]);
+      } else {
+        std::cerr << "the particle number is larger than the capacity of p_arr" << std::endl;
+        exit(-1);
+      }
     } else {
       idx = vacant_pos.back();
       p_arr[idx] = TNode(&buf[buf_pos]);

@@ -37,7 +37,7 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
               CellListNode_3<TNode>& cl, Domain_3 &dm) {
   const int my_par_num = ini_my_par_num(gl_par_num);
 #ifdef USE_MPI
-  p_arr.reserve(my_par_num * 2);
+  p_arr.reserve(my_par_num * 2.5);
   dm.set_max_buf_size(gl_par_num, 10.);
 #else
   p_arr.reserve(my_par_num);
@@ -53,6 +53,8 @@ void cal_force(std::vector<TNode> &p_arr,
                CellListNode_3<TNode> &cl,
                const Domain_3 &dm) {
 #ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   int n_ghost = 0;
   comm_par_before_interact(dm.neighbor, dm.inner_shell, dm.max_buf_size(),
     p_arr, cl, n_ghost);
@@ -61,6 +63,7 @@ void cal_force(std::vector<TNode> &p_arr,
     pi->interact(*pj, dm);
   };
   cl.for_each_pair(f_ij);
+
 #ifdef USE_MPI
   clear_ghost_after_interact(cl, dm.outer_shell, p_arr, n_ghost);
 #endif
@@ -79,9 +82,6 @@ void integrate(std::vector<TNode>& p_arr, TRan& myran,
 #ifdef USE_MPI
   comm_par_after_move(dm.neighbor, dm.outer_shell, dm.max_buf_size(), p_arr, cl);
 #endif
-  //int my_rank;
-  //MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  //std::cout << "proc=" << my_rank << "\t" << p_arr.size() << std::endl;
 }
 
 template <typename TNode, typename TInteract, typename TIntegrate>
@@ -112,7 +112,7 @@ void run(std::vector<TNode> &p_arr, TInteract interact,
   std::chrono::duration<double> elapsed_time = t2 - t1;
   std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
   std::cout << n_step * p_arr.size() / elapsed_time.count() << std::endl;
-  //if (my_rank == 0)
-  //  std::cout << "phi = " << phi_sum / count << std::endl;
+  if (my_rank == 0)
+    std::cout << "phi = " << phi_sum / count << std::endl;
 }
 

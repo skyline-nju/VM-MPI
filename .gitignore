@@ -11,6 +11,7 @@
 *.userprefs
 *.dat
 *.bin
+.vscode/
 
 # Build results
 [Dd]ebug/
