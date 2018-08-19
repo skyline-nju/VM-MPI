@@ -22,8 +22,7 @@ void cal_order_para(const std::vector<TPar> &p_arr,double &phi, Vec_3<double> &v
   if (my_rank == 0) {
     v_mean = gl_sum_v / gl_np;
     phi = v_mean.module();
-    std::cout << "phi = " << phi << "\tori =\t" << v_mean
-              << "\tN = " << gl_np  << std::endl;
+    std::cout << "phi = " << phi << "\tori =\t" << v_mean << "\tN = " << gl_np  << std::endl;
   }
 #else
   v_mean = sum_v / p_arr.size();
@@ -37,7 +36,7 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
               CellListNode_3<TNode>& cl, Domain_3 &dm) {
   const int my_par_num = ini_my_par_num(gl_par_num);
 #ifdef USE_MPI
-  p_arr.reserve(my_par_num * 2.5);
+  p_arr.reserve(my_par_num * 3);
   dm.set_max_buf_size(gl_par_num, 10.);
 #else
   p_arr.reserve(my_par_num);
@@ -52,17 +51,46 @@ template <typename TNode>
 void cal_force(std::vector<TNode> &p_arr,
                CellListNode_3<TNode> &cl,
                const Domain_3 &dm) {
+  auto f1 = [](TNode *pi, TNode *pj) {
+    pi->interact(*pj);
+  };
+  auto f2 = [&dm](TNode *pi, TNode *pj) {
+    pi->interact(*pj, dm);
+  };
+  auto f3 = [](TNode *pi, TNode *pj, const Vec_3<double> &offset) {
+    pi->interact(*pj, offset);
+  };
+
 #ifdef USE_MPI
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   int n_ghost = 0;
+
   comm_par_before_interact(dm.neighbor, dm.inner_shell, dm.max_buf_size(),
     p_arr, cl, n_ghost);
 #endif
-  auto f_ij = [&dm](TNode *pi, TNode *pj) {
-    pi->interact(*pj, dm);
-  };
-  cl.for_each_pair(f_ij);
+  Vec_3<int> beg1 = Vec_3<int>();
+  Vec_3<int> end1 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, 1);
+  Vec_3<int> beg2 = Vec_3<int>(0, 0, 1);
+  Vec_3<int> end2 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z - 2);
+  Vec_3<int> beg3 = Vec_3<int>(0, 0, cl.cells_size().z - 2);
+  Vec_3<int> end3 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z);
+
+  //cl.for_each_pair(f1, f2, beg2, end2);
+  //cl.for_each_pair(f1, f2, beg1, end1);
+  //cl.for_each_pair(f1, f2, beg3, end3);
+
+  //cl.for_each_pair_slow(f2, beg1, end1);
+  //cl.for_each_pair_slow(f2, beg2, end2);
+  //cl.for_each_pair_slow(f2, beg3, end3);
+
+  cl.for_each_pair_fast(f1, f3, beg2, end2);
+  cl.for_each_pair_fast(f1, f3, beg1, end1);
+  cl.for_each_pair_fast(f1, f3, beg3, end3);
+
+  double phi;
+  Vec_3<double> v_mean;
+  cal_order_para(p_arr, phi, v_mean);
 
 #ifdef USE_MPI
   clear_ghost_after_interact(cl, dm.outer_shell, p_arr, n_ghost);
@@ -85,10 +113,11 @@ void integrate(std::vector<TNode>& p_arr, TRan& myran,
 }
 
 template <typename TNode, typename TInteract, typename TIntegrate>
-void run(std::vector<TNode> &p_arr, TInteract interact,
+void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
          TIntegrate integrate, int n_step, int sep) {
-  int my_rank;
+  int my_rank, tot_proc;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   auto t1 = std::chrono::system_clock::now();
   double phi_sum = 0;
   int count = 0;
@@ -110,9 +139,12 @@ void run(std::vector<TNode> &p_arr, TInteract interact,
   }
   auto t2 = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = t2 - t1;
-  std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
-  std::cout << n_step * p_arr.size() / elapsed_time.count() << std::endl;
-  if (my_rank == 0)
-    std::cout << "phi = " << phi_sum / count << std::endl;
+  if (my_rank == 0) {
+    if (count > 0)
+      std::cout << "phi = " << phi_sum / count << std::endl; 
+    std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
+    std::cout << "speed: " << n_step * gl_par_num / elapsed_time.count() / tot_proc
+      << " particle step per second per core" << std::endl;
+  }
 }
 

@@ -23,7 +23,13 @@ public:
   void interact(Par &p);
 
   template <class Par>
+  void interact(Par &p, const Vec_3<double> &offset);
+
+  template <class Par>
   void interact(Par &p, const Domain_3 &domain);
+
+  template<class Par>
+  void interact_w_ghost(Par &ghost, const Domain_3 &domain);
 
   template <class TRan>
   void move(double eta, double v0, TRan &myran);
@@ -53,12 +59,32 @@ void VicsekPar_3::interact(Par& p) {
 }
 
 template <class Par>
+void VicsekPar_3::interact(Par& p, const Vec_3<double>& offset) {
+  Vec_3<double> dR = p.pos - pos + offset;
+  if (dR.square() < 1) {
+    ori_next += p.ori;
+    p.ori_next += ori;
+  }
+}
+
+
+template <class Par>
 void VicsekPar_3::interact(Par& p, const Domain_3& domain) {
   Vec_3<double> dR = pos - p.pos;
   untangle_3(dR, domain.gl_l(), domain.gl_half_l(), domain.flag_comm());
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
+  }
+}
+
+template<class Par>
+void VicsekPar_3::interact_w_ghost(Par & ghost, const Domain_3 & domain) {
+  Vec_3<double> dR = pos - ghost.pos;
+  untangle_3(dR, domain.gl_l(), domain.gl_half_l(), domain.flag_comm());
+  if (dR.square() < 1) {
+    ori_next += ghost.ori;
+    ghost.ori_next += ori;
   }
 }
 

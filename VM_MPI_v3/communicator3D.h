@@ -41,8 +41,6 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
   const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
-  const int n_new = buf_size / 6;
-  const int n0 = p_arr.size();
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 6) {
     auto idx_last = p_arr.size();
     if (idx_last != p_arr.capacity()) {
@@ -172,7 +170,7 @@ void comm_par_before_interact(const int neighbor_proc[3][2],
       const auto & prev_block = inner_shell[0][direction];
       const auto & next_block = inner_shell[1][direction];
       comm_par(prev_proc, next_proc, 13, 31, prev_block, next_block,
-               max_buf_size, pack, unpack, []() {});
+               max_buf_size, pack, unpack, [](){});
     }
   }
 }

@@ -11,13 +11,13 @@ int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  double L = 32;
+  double L = 50;
   Vec_3<double> gl_l(L, L, L);
   double eta = 0.2;
   double rho0 = 1.;
   unsigned long long seed = 12;
   Ranq1 myran(seed + my_rank);
-  int n_step = 50000;
+  int n_step = 100;
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x * gl_l.y * gl_l.z * rho0);
@@ -34,6 +34,6 @@ int main(int argc, char* argv[]) {
    integrate(par_arr, myran, *cl, dm, eta, v0);
   };
 
-  run(p_arr, interact, integ, n_step, 200);
+  run(p_arr, gl_par_num, interact, integ, n_step, 400);
   MPI_Finalize();
 }

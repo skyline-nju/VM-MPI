@@ -92,19 +92,25 @@ void Domain_3::set_max_buf_size(int gl_par_num, double amplification) {
     area.push_back(l_.x * l_.z);
   }
   if (flag_comm_.z) {
-    area.push_back(l_.y * l_.z);
+    area.push_back(l_.x * l_.y);
   }
-  std::sort(area.begin(), area.end(), [](double x, double y) {return x > y; });
-  
-  const double rho0 = gl_par_num / (gl_l_.x * gl_l_.y * gl_l_.z);
-  int n0 = int(rho0 * area[0] * amplification);
-  max_buf_size_ = 6 * n0;
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-  if (my_rank == 0) {
-    std::cout << "max area = " << area[0] << std::endl;
-    std::cout << "max particle number per communication: " << n0  << " particles" << std::endl;
+  if (area.empty()) {
+    max_buf_size_ = 0;
+    
+  } else {
+    std::sort(area.begin(), area.end(), [](double x, double y) {return x > y; });
+    
+    const double rho0 = gl_par_num / (gl_l_.x * gl_l_.y * gl_l_.z);
+    int n0 = int(rho0 * area[0] * amplification);
+    max_buf_size_ = 6 * n0;
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    if (my_rank == 0) {
+      std::cout << "max area = " << area[0] << std::endl;
+      std::cout << "max particle number per communication: " << n0  << " particles" << std::endl;
+    }
   }
 }
 
