@@ -151,6 +151,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="communicator3D.h" />
+    <ClInclude Include="disorder.h" />
     <ClInclude Include="domain3D.h" />
     <ClInclude Include="exporter.h" />
     <ClInclude Include="particle3D.h" />

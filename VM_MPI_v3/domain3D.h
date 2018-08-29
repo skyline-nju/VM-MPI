@@ -31,6 +31,8 @@ public:
 
   void set_max_buf_size(int gl_par_num, double amplification);
 
+
+
   const Vec3d & l() const { return l_; }
   const Vec3d & gl_l() const { return gl_l_; }
   const Vec3d & gl_half_l() const { return gl_half_l_; }

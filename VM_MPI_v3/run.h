@@ -2,6 +2,7 @@
 #include "domain3D.h"
 #include "cellList3D.h"
 #include <iomanip>
+#include "disorder.h"
 
 int ini_my_par_num(int gl_par_num);
 
@@ -110,6 +111,20 @@ void integrate(std::vector<TNode>& p_arr, TRan& myran,
   }
   cl.recreate(p_arr);
 
+#ifdef USE_MPI
+  comm_par_after_move(dm.neighbor, dm.outer_shell, dm.max_buf_size(), p_arr, cl);
+#endif
+}
+
+template <typename TNode, typename TRan>
+void integrate(std::vector<TNode>& p_arr, TRan &myran,
+               CellListNode_3<TNode>& cl, const Domain_3 &dm,
+               double eta, double v0, const RandTorqueArr &torques) {
+  const auto end = p_arr.end();
+  for (auto it = p_arr.begin(); it != end; ++it) {
+    (*it).move(eta, v0, torques.get_torque(*it), myran, dm);
+  }
+  cl.recreate(p_arr);
 #ifdef USE_MPI
   comm_par_after_move(dm.neighbor, dm.outer_shell, dm.max_buf_size(), p_arr, cl);
 #endif

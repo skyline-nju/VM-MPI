@@ -1,6 +1,7 @@
 #pragma once
 #include "vect.h"
 #include "domain3D.h"
+#include "disorder.h"
 
 class VicsekPar_3 {
 public:
@@ -35,7 +36,13 @@ public:
   void move(double eta, double v0, TRan &myran);
 
   template <class TRan>
+  void move(double eta, double v0, const RandTorque &torque, TRan &myran);
+
+  template <class TRan>
   void move(double eta, double v0, TRan &myran, const Domain_3 &domain);
+
+  template <class TRan>
+  void move(double eta, double v0, const RandTorque &torque,  TRan &myran, const Domain_3 &domain);
 
   void copy(double* dest, int& idx) const;
 };
@@ -91,9 +98,18 @@ void VicsekPar_3::interact_w_ghost(Par & ghost, const Domain_3 & domain) {
 template <class TRan>
 void VicsekPar_3::move(double eta, double v0, TRan& myran) {
   ori_next.normalize();
-  Vec_3<double> ax{};
-  ori_next.rand_perp_ax(ax, myran);
-  ori_next.rotate((myran.doub() - 0.5) * eta * PI * 2, ax);
+  double theta = (myran.doub() - 0.5) * eta * PI * 2;
+  ori_next.rotate_rand(theta, myran);
+  ori = ori_next;
+  pos += v0 * ori;
+}
+
+template <class TRan>
+void VicsekPar_3::move(double eta, double v0, const RandTorque& torque, TRan& myran) {
+  ori_next.normalize();
+  double theta = (myran.doub() - 0.5) * eta * PI * 2;
+  ori_next.rotate_rand(theta, myran);
+  torque.rotate(ori_next);
   ori = ori_next;
   pos += v0 * ori;
 }
@@ -104,6 +120,11 @@ void VicsekPar_3::move(double eta, double v0, TRan& myran, const Domain_3& domai
   tangle_3(pos, domain.gl_l(), domain.flag_comm());
 }
 
+template <class TRan>
+void VicsekPar_3::move(double eta, double v0, const RandTorque& torque, TRan& myran, const Domain_3& domain) {
+  move(eta, v0, torque, myran);
+  tangle_3(pos, domain.gl_l(), domain.flag_comm());
+}
 
 
 inline void VicsekPar_3::copy(double *dest, int &idx) const {

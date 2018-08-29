@@ -39,11 +39,6 @@ int main(int argc, char* argv[]) {
     cal_force(par_arr, *cl, dm);
   };
 
-  // integrate
-  auto integ = [&dm, cl, &myran, eta, v0](std::vector<node_t> &par_arr) {
-   integrate(par_arr, myran, *cl, dm, eta, v0);
-  };
-
   // output
   ini_output(gl_par_num, eta, eps, n_step, seed, gl_l, dm.domain_sizes());
   LogExporter *log = nullptr;
@@ -52,11 +47,11 @@ int main(int argc, char* argv[]) {
   }
   std::cout << "succeed in initializing log for proc " << my_rank  << std::endl;
 
-  FieldExporter *field_exp = nullptr;
   int box_len = 1;
   if (L >= 64) {
     box_len = 2;
   }
+  FieldExporter *field_exp = nullptr;
   field_exp = new FieldExporter(field_dt, 0, box_len, dm.domain_rank(),
                                 dm.gl_cells_size(), dm.cells_size());
   ParticleExporter pexp(snap_dt, 0);
@@ -73,7 +68,19 @@ int main(int argc, char* argv[]) {
   };
   std::cout << "succeed in initializing output for proc " << my_rank  << std::endl;
   //run(p_arr, gl_par_num, interact, integ, n_step, 1);
-  run(p_arr, gl_par_num, interact, integ, out, n_step);
+
+  if (eps == 0) {
+    auto integ = [&dm, cl, &myran, eta, v0](std::vector<node_t> &par_arr) {
+      integrate(par_arr, myran, *cl, dm, eta, v0);
+    };
+    run(p_arr, gl_par_num, interact, integ, out, n_step);
+  } else {
+    RandTorqueArr torques(eps, myran, dm.origin(), dm.cells_size(), dm.gl_cells_size());
+    auto integ = [&dm, cl, &myran, eta, v0, &torques](std::vector<node_t> &par_arr) {
+      integrate(par_arr, myran, *cl, dm, eta, v0, torques);
+    };
+    run(p_arr, gl_par_num, interact, integ, out, n_step);
+  }
 
   delete log;
   delete field_exp;

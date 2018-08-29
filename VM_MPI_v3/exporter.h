@@ -18,18 +18,19 @@ int get_start_particle_num(int particle_num);
 
 template <typename T>
 void get_new_axis(const Vec_3<T> &new_x_axis, Vec_3<T> &new_y_axis, Vec_3<T> &new_z_axis) {
-  if (new_x_axis.x == 0. && new_x_axis.y== 0.) {
+  if (new_x_axis.x == 0. && new_x_axis.y == 0.) {
     new_z_axis = Vec_3<double>(-1, 0, 0);
     new_y_axis = Vec_3<double>(0, 1, 0);
   } else {
-    new_y_axis = Vec_3<double>(new_x_axis.y, -new_x_axis.x, 0);
+    new_y_axis = Vec_3<double>(-new_x_axis.y, new_x_axis.x, 0);
     new_y_axis.normalize();
-    double length = new_x_axis.module();
-    double length_xy = std::sqrt(new_x_axis.x * new_x_axis.x + new_x_axis.y + new_x_axis.y);
-    double c = length_xy / length;
-    double s = new_x_axis.z / length;
-    new_z_axis = Vec_3<double>(0, 0, 1);
-    new_z_axis.rotate(c, s, new_y_axis);
+    new_z_axis = new_x_axis.cross(new_y_axis);
+    //double length = new_x_axis.module();
+    //double length_xy = std::sqrt(new_x_axis.x * new_x_axis.x + new_x_axis.y * new_x_axis.y);
+    //double c = length_xy / length;
+    //double s = new_x_axis.z / length;
+    //new_z_axis = Vec_3<double>(0, 0, 1);
+    //new_z_axis.rotate(c, -s, new_y_axis);
   }
 }
 
