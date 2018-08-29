@@ -7,7 +7,8 @@ Domain_3::Domain_3(const Vec3d & gl_l)
 Domain_3::Domain_3(const Vec3d& gl_l, const Vec3i& gl_size,
                    const Vec3i& gl_cells_size, Vec3i& cells_size,
                    Vec3d& origin, Vec3b &flag_c)
-  : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5), gl_size_(gl_size) {
+  : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5), gl_size_(gl_size),
+    gl_cells_size_(gl_cells_size), cells_size_(cells_size) {
   find_neighbor(rank_, flag_comm_, neighbor);
   flag_c = flag_comm_;
   set_l(gl_cells_size, cells_size, l_, origin_);
@@ -164,10 +165,12 @@ Vec_3<int> Domain_3::partition(const Vec3d& l, int n_proc) {
 
 Vec_3<int> Domain_3::partition(const Vec3d& l) {
 #ifdef USE_MPI
-  int tot_proc;
+  int tot_proc, my_rank;
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  MPI_Comm_size(MPI_COMM_WORLD, &my_rank);
   Vec_3<int> domains_size = partition(l, tot_proc);
-  std::cout << "domains size = " << domains_size << std::endl;
+  if (my_rank == 0)
+    std::cout << "domains size = " << domains_size << std::endl;
   return domains_size;
 #else
   return Vec3i(1, 1, 1);

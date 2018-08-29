@@ -1,6 +1,7 @@
 #pragma once
 #include "domain3D.h"
 #include "cellList3D.h"
+#include <iomanip>
 
 int ini_my_par_num(int gl_par_num);
 
@@ -11,24 +12,26 @@ void cal_order_para(const std::vector<TPar> &p_arr,double &phi, Vec_3<double> &v
   for (auto it = p_arr.cbegin(); it != end; ++it) {
     sum_v += (*it).ori;
   }
-#ifdef USE_MPI
-  Vec_3<double> gl_sum_v{};
-  int my_np = p_arr.size();
-  int gl_np;
-  MPI_Reduce(&sum_v.x, &gl_sum_v.x, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&my_np, &gl_np, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  if (my_rank == 0) {
-    v_mean = gl_sum_v / gl_np;
+  int tot_proc;
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  if (tot_proc > 1) {
+    Vec_3<double> gl_sum_v{};
+    int my_np = p_arr.size();
+    int gl_np = 0;
+    MPI_Reduce(&sum_v.x, &gl_sum_v.x, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&my_np, &gl_np, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    if (my_rank == 0) {
+      v_mean = gl_sum_v / gl_np;
+      phi = v_mean.module();
+      std::cout << std::setprecision(10) << "phi = " << phi << "\tori =\t" << v_mean << "\tN = " << gl_np << std::endl;
+    }
+  } else {
+    v_mean = sum_v / p_arr.size();
     phi = v_mean.module();
-    std::cout << "phi = " << phi << "\tori =\t" << v_mean << "\tN = " << gl_np  << std::endl;
+    std::cout << std::setprecision(16) << std::setw(18) << "phi = " << phi << "\t" << "ori = " << v_mean << std::endl;
   }
-#else
-  v_mean = sum_v / p_arr.size();
-  phi = v_mean.module();
-  std::cout << "phi = " << phi << "\t" << "ori = " << v_mean << std::endl;
-#endif
 }
 
 template <typename TNode, typename TRan>
@@ -37,7 +40,7 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
   const int my_par_num = ini_my_par_num(gl_par_num);
 #ifdef USE_MPI
   p_arr.reserve(my_par_num * 3);
-  dm.set_max_buf_size(gl_par_num, 10.);
+  dm.set_max_buf_size(gl_par_num, 20.);
 #else
   p_arr.reserve(my_par_num);
 #endif
@@ -69,28 +72,28 @@ void cal_force(std::vector<TNode> &p_arr,
   comm_par_before_interact(dm.neighbor, dm.inner_shell, dm.max_buf_size(),
     p_arr, cl, n_ghost);
 #endif
-  Vec_3<int> beg1 = Vec_3<int>();
-  Vec_3<int> end1 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, 1);
-  Vec_3<int> beg2 = Vec_3<int>(0, 0, 1);
-  Vec_3<int> end2 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z - 2);
-  Vec_3<int> beg3 = Vec_3<int>(0, 0, cl.cells_size().z - 2);
-  Vec_3<int> end3 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z);
+  //Vec_3<int> beg1 = Vec_3<int>();
+  //Vec_3<int> end1 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, 1);
+  //Vec_3<int> beg2 = Vec_3<int>(0, 0, 1);
+  //Vec_3<int> end2 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z - 2);
+  //Vec_3<int> beg3 = Vec_3<int>(0, 0, cl.cells_size().z - 2);
+  //Vec_3<int> end3 = Vec_3<int>(cl.cells_size().x, cl.cells_size().y, cl.cells_size().z - 1);
 
   //cl.for_each_pair(f1, f2, beg2, end2);
   //cl.for_each_pair(f1, f2, beg1, end1);
   //cl.for_each_pair(f1, f2, beg3, end3);
 
-  //cl.for_each_pair_slow(f2, beg1, end1);
   //cl.for_each_pair_slow(f2, beg2, end2);
+  //cl.for_each_pair_slow(f2, beg1, end1);
   //cl.for_each_pair_slow(f2, beg3, end3);
 
-  cl.for_each_pair_fast(f1, f3, beg2, end2);
-  cl.for_each_pair_fast(f1, f3, beg1, end1);
-  cl.for_each_pair_fast(f1, f3, beg3, end3);
+  //cl.for_each_pair_fast(f1, f3, beg2, end2);
+  //cl.for_each_pair_fast(f1, f3, beg1, end1);
+  //cl.for_each_pair_fast(f1, f3, beg3, end3);
+  cl.for_each_pair_fast(f1, f3);
+  //cl.for_each_pair(f1, f2);
+  //cl.for_each_pair_slow(f2);
 
-  double phi;
-  Vec_3<double> v_mean;
-  cal_order_para(p_arr, phi, v_mean);
 
 #ifdef USE_MPI
   clear_ghost_after_interact(cl, dm.outer_shell, p_arr, n_ghost);
@@ -141,10 +144,21 @@ void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
   std::chrono::duration<double> elapsed_time = t2 - t1;
   if (my_rank == 0) {
     if (count > 0)
-      std::cout << "phi = " << phi_sum / count << std::endl; 
+      std::cout << "phi = " << phi_sum / count << std::endl;  
     std::cout << "elapsed time: " << elapsed_time.count() << std::endl;
-    std::cout << "speed: " << n_step * gl_par_num / elapsed_time.count() / tot_proc
+    std::cout << std::scientific <<"speed: " << n_step * gl_par_num / elapsed_time.count() / tot_proc
       << " particle step per second per core" << std::endl;
   }
 }
 
+template <typename TNode, typename TInteract, typename TIntegrate, typename TOut>
+void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
+         TIntegrate integrate, TOut out, int n_step) {
+  for (int i = 1; i <= n_step; i++) {
+    interact(p_arr);
+
+    integrate(p_arr);
+
+    out(i, p_arr);
+  }
+}

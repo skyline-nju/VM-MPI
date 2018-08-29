@@ -40,7 +40,8 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       CellListNode_3<TNode>& cl,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
-  const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
+  const Vec_3<double> offset = get_offset(Vec_3<double>(buf[0], buf[1], buf[2]), cl);
+
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 6) {
     auto idx_last = p_arr.size();
     if (idx_last != p_arr.capacity()) {
@@ -83,7 +84,7 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         CellListNode_3<TNode>& cl,
                         std::vector<TNode> &p_arr,
                         std::vector<int> &vacant_pos) {  //! should be sorted in desending order
-  const Vec_3<double> offset = cl.get_offset(Vec_3<double>(buf[0], buf[1], buf[2]));
+  const Vec_3<double> offset = get_offset(Vec_3<double>(buf[0], buf[1], buf[2]), cl);
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 6) {
     int idx;
     if (vacant_pos.empty()) {
