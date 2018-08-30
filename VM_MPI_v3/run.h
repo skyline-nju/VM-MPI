@@ -149,7 +149,7 @@ void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
       double phi = 0;
       Vec_3<double> v_mean{};
       cal_order_para(p_arr, phi, v_mean);
-      if (i > 10000) {
+      if (i > 100000) {
         phi_sum += phi;
         count++;
       }

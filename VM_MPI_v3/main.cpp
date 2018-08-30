@@ -19,14 +19,14 @@ int main(int argc, char* argv[]) {
   double rho0 = 1.;
   unsigned long long seed = 12;
   Ranq1 myran(seed + my_rank);
-  int n_step = 200;
+  int n_step = 1000000;
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x * gl_l.y * gl_l.z * rho0);
 
-  int log_dt = 100;
-  int field_dt = 100;
-  int snap_dt = 100;
+  int log_dt = 10000;
+  int field_dt = 10000;
+  int snap_dt = 20000;
 
   typedef BiNode<VicsekPar_3> node_t;
   CellListNode_3<node_t> *cl;
@@ -67,7 +67,6 @@ int main(int argc, char* argv[]) {
     order_para.dump(i, par_arr);
   };
   std::cout << "succeed in initializing output for proc " << my_rank  << std::endl;
-  //run(p_arr, gl_par_num, interact, integ, n_step, 1);
 
   if (eps == 0) {
     auto integ = [&dm, cl, &myran, eta, v0](std::vector<node_t> &par_arr) {

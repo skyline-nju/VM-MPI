@@ -157,7 +157,7 @@ void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
     thickness[dim] = flag_comm[dim] ? 1 : 0;
   }
 
-  find_shell(cells_size, thickness, inner_shell);
+  find_shell(cells_size, -thickness, inner_shell);
   for (int ori = 0; ori < 3; ori++) {
     inner_shell[0][ori].beg += thickness;
     inner_shell[0][ori].end += thickness;

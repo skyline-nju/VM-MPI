@@ -67,6 +67,8 @@ class OrderParaExporter: public BaseExporter {
 public:
   explicit OrderParaExporter(int interval);
 
+  ~OrderParaExporter();
+
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar> &p_arr);
 private:
@@ -93,6 +95,7 @@ public:
                         const Vec_3<int> &domain_rank,
                         const Vec_3<int> &gl_cells_size,
                         const Vec_3<int> &my_cells_size);
+  ~FieldExporter();
 
   void set_coarse_grain_box(const Vec_3<int> &gl_cells_size,
                             const Vec_3<int> &my_cells_size,
@@ -184,6 +187,8 @@ class ParticleExporter: public BaseExporter {
 public:
   explicit ParticleExporter(int frame_interval, int first_frame,
                             bool flag_vel = false, bool flag_ori=true);
+
+  ~ParticleExporter();
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar> &p_arr);

@@ -1,4 +1,11 @@
-#include "exporter.h"
+#include "vect.h"
+#include "comn.h"
+#include "exporter.h" 
+#include "mpi.h"
+#include "netcdf.h"
+#ifndef _MSC_VER
+#include "netcdf_par.h"
+#endif
 
 Vec_3<double> gl_l;
 Vec_3<int> domain_sizes;
@@ -82,6 +89,12 @@ OrderParaExporter::OrderParaExporter(int interval)
   }
   gl_np_ = gl_n_par;
   my_proc_ = my_proc;
+}
+
+OrderParaExporter::~OrderParaExporter() {
+  if (my_proc_ == 0) {
+    fout_.close();
+  }
 }
 
 FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
@@ -170,6 +183,10 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   check_err(stat, __LINE__, __FILE__);
 }
 
+FieldExporter::~FieldExporter() {
+  const auto stat = nc_close(ncid_);
+  check_err(stat, __LINE__, __FILE__);
+}
 
 
 void FieldExporter::set_coarse_grain_box(const Vec_3<int>& gl_cells_size,
@@ -347,6 +364,11 @@ ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool fla
   stat = nc_put_var(ncid_, spatial_id_, "xyz");
   check_err(stat, __LINE__, __FILE__);
   stat = nc_put_var(ncid_, cell_spatial_id_, "abc");
+  check_err(stat, __LINE__, __FILE__);
+}
+
+ParticleExporter::~ParticleExporter() {
+  const auto stat = nc_close(ncid_);
   check_err(stat, __LINE__, __FILE__);
 }
 

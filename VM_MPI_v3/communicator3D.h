@@ -127,7 +127,6 @@ void comm_par(int prev_proc, int next_proc, int tag_bw, int tag_fw,
   pack(buf[3], buf_size[3], next_block);
   MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, tag_fw, MPI_COMM_WORLD, &req[3]);
 
-
   //! do something while waiting
   do_sth();
 
