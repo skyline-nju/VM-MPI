@@ -1,55 +1,53 @@
-#include <iostream>
-#include <ctime>
-#include <chrono>
-//#include "singleDomain2D.h"
-#include "node.h"
-#include "particle.h"
-#include "singleDomain2D.h"
-//#define USE_MPI
-#ifdef USE_MPI
 #include "mpi.h"
-#endif
+#include "communicator2D.h"
+#include "domain2D.h"
+#include "cellList2D.h"
+#include "rand.h"
+#include "run2D.h"
+#include "particle2D.h"
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
-#ifdef USE_MPI
   MPI_Init(&argc, &argv);
-  int my_rank;
-  int size;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  int my_rank, tot_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-#endif
-
-#ifndef USE_MPI
-  double L = 64;
-  double rho0 = 1;
+  double L = 32;
+  Vec_2<double> gl_l(L, L);
   double eta = 0.2;
+  double eps = 0;
+  double rho0 = 1;
   unsigned long long seed = 1;
-  int n_step = 10000;
-  int t_start = 0;
-  int t_sep = 100;
+  Ranq1 myran(seed + my_rank);
+  int n_step = 1000000;
+  double v0 = 0.5;
+  double r_cut = 1.;
+  int gl_par_num = int(gl_l.x *gl_l.y * rho0);
 
-  {
-    Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
-    s.ini_rand();
-    s.eval_elapsed_time(eta, n_step, t_start, t_sep, 1);
+  typedef BiNode<VicsekPar_2> node_t;
+  CellListNode_2<node_t> *cl;
+  std::vector<node_t> p_arr;
+  Domain_2 dm(gl_l, &cl, r_cut);
+  ini_rand(p_arr, gl_par_num, myran, *cl, dm);
+
+  // pair-wise interaction
+  auto interact = [&dm, cl](std::vector<node_t> &par_arr) {
+    cal_force(par_arr, *cl, dm);
+  };
+
+  if (eps == 0) {
+    auto integ = [&dm, cl, &myran, eta, v0](std::vector<node_t> &par_arr) {
+      integrate(par_arr, myran, *cl, dm, eta, v0);
+    };
+    run(p_arr, gl_par_num, interact, integ, n_step, 100);
+  } else {
+    RandTorqueArr_2 torques(eps, myran, dm.origin(), dm.cells_size(), dm.gl_cells_size());
+    auto integ = [&dm, cl, &myran, eta, v0, &torques](std::vector<node_t> &par_arr) {
+      integrate(par_arr, myran, *cl, dm, eta, v0, torques);
+    };
+    run(p_arr, gl_par_num, interact, integ, n_step, 100);
   }
 
-  //{
-  //  Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
-  //  s.ini_rand();
-  //  s.eval_elapsed_time(eta, n_step, t_start, t_sep, 3);
-  //}
-
-  //{
-  //  Single_domain_2<BiNode<VicsekPar>> s(L, L, rho0, seed);
-  //  s.ini_rand();
-  //  s.eval_elapsed_time(eta, n_step, t_start, t_sep, 2);
-  //}
-
-#else
   MPI_Finalize();
-#endif
-
+  return 0;
 }

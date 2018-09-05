@@ -1,6 +1,6 @@
 #include "vect.h"
-#include "comn.h"
 #include "exporter.h" 
+#include "comn.h"
 #include "mpi.h"
 #include "netcdf.h"
 #ifndef _MSC_VER
@@ -143,7 +143,7 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   stat = nc_def_var(ncid_, "density_field", NC_USHORT, 4, den_dims, &densities_id_);
   check_err(stat, __LINE__, __FILE__);
   int vel_dims[5] = { frame_dim, spatial_dim, gl_field_dims[0], gl_field_dims[1], gl_field_dims[2]};
-  stat = nc_def_var(ncid_, "spatial_field", NC_FLOAT, 5, vel_dims, &velocities_id_);
+  stat = nc_def_var(ncid_, "velocity_field", NC_FLOAT, 5, vel_dims, &velocities_id_);
   check_err(stat, __LINE__, __FILE__);
 
 #ifndef _MSC_VER

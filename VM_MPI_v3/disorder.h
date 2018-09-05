@@ -35,8 +35,6 @@ public:
   Vec_3<double> ori;
 };
 
-
-
 template <typename TRan>
 RandTorque::RandTorque(double theta, TRan &myran) {
   cos_theta = std::cos(theta);
@@ -61,14 +59,22 @@ void RandTorque::ini(double epsilon, TRan& myran, std::vector<RandTorque>& torqu
   theta_arr.reserve(size);
   torque_arr.reserve(size);
   Vec_3<double> v_sum{};
+  double theta_statistic[2]{};
 
   for (int i = 0; i < size; i++) {
-    theta_arr.push_back(epsilon * PI * 2 * (myran.doub() - 0.5));
+    double theta = epsilon * PI * 2 * (myran.doub() - 0.5);
+    theta_arr.push_back(theta);
+    theta_statistic[0] += theta;
+    theta_statistic[1] += theta * theta;
+
     Vec_3<double> v{};
     sphere_point_picking(v.x, v.y, v.z, myran);
     ori_arr.push_back(v);
     v_sum += v * theta_arr.back();
   }
+
+  double gl_theta_statistic[2];
+  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
   Vec_3<double> gl_v{};
   MPI_Reduce(&v_sum.x, &gl_v, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -77,19 +83,33 @@ void RandTorque::ini(double epsilon, TRan& myran, std::vector<RandTorque>& torqu
   gl_v.y /= gl_size;
   gl_v.z /= gl_size;
 
+  if (my_rank == 0) {
+    std::cout << "mean of theta " << gl_theta_statistic[0] / gl_size << "\n";
+    std::cout << "std of theta " << std::sqrt(gl_theta_statistic[1] / gl_size - gl_theta_statistic[0] * gl_theta_statistic[0] / gl_size / gl_size) << "\n";
+    std::cout << "excess torque " << gl_v << std::endl;
+  }
+
   v_sum = Vec_3<double>();
+  theta_statistic[0] = theta_statistic[1] = 0;
   for (int i = 0; i < size; i++) {
     Vec_3<double> v = theta_arr[i] * ori_arr[i] - gl_v;
-    theta_arr[i] = v.module();
-    ori_arr[i] = v / theta_arr[i];
-    double c = std::cos(theta_arr[i]);
-    double s = std::sin(theta_arr[i]);
-    torque_arr.emplace_back(c, s, ori_arr[i]);
+    double theta = v.module();
+    if (theta_arr[i] < 0) {
+      theta = -theta;
+    }
+    theta_statistic[0] += theta;
+    theta_statistic[1] += theta * theta;
+    theta_arr[i] = theta;
+    ori_arr[i] = v / theta;
+    torque_arr.emplace_back(std::cos(theta), std::sin(theta), ori_arr[i]);
     v_sum += theta_arr[i] * ori_arr[i];
   }
+  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&v_sum.x, &gl_v, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   if (my_rank == 0) {
-    std::cout << "sum of random torques:" << gl_v << std::endl;
+    std::cout << "mean of theta " << gl_theta_statistic[0] / gl_size << "\n";
+    std::cout << "std of theta " << std::sqrt(gl_theta_statistic[1] / gl_size - gl_theta_statistic[0] * gl_theta_statistic[0] / gl_size / gl_size) << "\n";
+    std::cout << "sum of random torques " << gl_v << std::endl;
   }
 }
 

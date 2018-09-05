@@ -15,37 +15,46 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="comn.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="boundary.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="rand.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="comn.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="vect.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="particle.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="boundary.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="node.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="cellList2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="particle2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="communicator2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="domain2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="run2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="disorder2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="exporter2D.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="cellList2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="communicator2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="domain2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="run2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="exporter2D.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
