@@ -129,6 +129,8 @@ public:
   int get_par_num(const Vec2i &beg, const Vec2i &end) const;
 
   int get_par_num() const;
+
+  void reserve_particles(std::vector<TNode> &p_arr, int new_size, double magnification = 1.1);
 protected:
   std::vector<TNode*> head_;
 };
@@ -382,6 +384,15 @@ int CellListNode_2<TNode>::get_par_num(const Vec2i& beg, const Vec2i& end) const
 template <typename TNode>
 int CellListNode_2<TNode>::get_par_num() const {
   return get_par_num(Vec2i(), n_);
+}
+
+template <typename TNode>
+void CellListNode_2<TNode>::reserve_particles(std::vector<TNode>& p_arr, int new_size, double magnification) {
+  size_t new_cap = new_size * magnification;
+  std::cout << "old capacity = " << p_arr.capacity() << "\t";
+  p_arr.reserve(new_cap);
+  recreate(p_arr);
+  std::cout << "new capacity = " << new_cap << std::endl;
 }
 
 /**

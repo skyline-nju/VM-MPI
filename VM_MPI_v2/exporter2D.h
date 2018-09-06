@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "comn.h"
 #include "vect.h"
 #include "netcdf.h"
@@ -7,10 +8,11 @@
 #include "netcdf_par.h"
 #endif
 #include "mpi.h"
-#define NP_PER_NODE 12
 
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
                 const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
+
+void output_finalize();
 
 // check whether there is error when outputting netcdf file
 void check_err(const int stat, const int line, const char * file);
@@ -72,13 +74,13 @@ void OrderParaExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
 class FieldExporter : public BaseExporter {
 public:
   explicit FieldExporter(int frame_interval, int first_frame, int bin_len,
-    const Vec_2<int> &domain_rank,
-    const Vec_2<int> &gl_cells_size,
-    const Vec_2<int> &my_cells_size);
+                         const Vec_2<int> &domain_rank,
+                         const Vec_2<int> &gl_cells_size,
+                         const Vec_2<int> &my_cells_size);
 
   void set_coarse_grain_box(const Vec_2<int> &gl_cells_size,
-    const Vec_2<int> &my_cells_size,
-    const Vec_2<int> &domain_rank);
+                            const Vec_2<int> &my_cells_size,
+                            const Vec_2<int> &domain_rank);
 
   template <typename TPar, typename T1, typename T2>
   void coarse_grain(const std::vector<TPar> &p_arr, T1 *den_fields, T2 *vel_fields) const;
@@ -109,7 +111,7 @@ private:
   size_t time_idx_[1];
 
 #ifdef NP_PER_NODE
-  int my_host_;
+  Vec_2<int> n_host_{};
 #endif
 };
 
@@ -143,13 +145,9 @@ void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
 
     coarse_grain(p_arr, den_fields, vel_fields);
 
-    //std::cout << "density start set\t" << den_start_set_[0] << "\t" << den_start_set_[1] << "\t" << den_start_set_[2] << "\t" << den_start_set_[3] << std::endl;
-    //std::cout << "density count set\t" << den_count_set_[0] << "\t" << den_count_set_[1] << "\t" << den_count_set_[2] << "\t" << den_count_set_[3] << std::endl;
     stat = nc_put_vara(ncid_, densities_id_, den_start_set_, den_count_set_, den_fields);
     check_err(stat, __LINE__, __FILE__);
 
-    //std::cout << "velocity start set\t" << vel_start_set_[0] << "\t" << vel_start_set_[1] << "\t" << vel_start_set_[2] << "\t" << vel_start_set_[3] << "\t" << vel_start_set_[4] << std::endl;
-    //std::cout << "velocity count set\t" << vel_count_set_[0] << "\t" << vel_count_set_[1] << "\t" << vel_count_set_[2] << "\t" << vel_count_set_[3] << "\t" << vel_count_set_[4] << std::endl;
     stat = nc_put_vara(ncid_, velocities_id_, vel_start_set_, vel_count_set_, vel_fields);
     check_err(stat, __LINE__, __FILE__);
     time_idx_[0]++;

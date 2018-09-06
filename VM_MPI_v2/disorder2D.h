@@ -1,5 +1,5 @@
 #pragma once
-#define CHECK_RANGE
+//#define CHECK_RANGE
 #include <vector>
 #include "comn.h"
 #include "mpi.h"

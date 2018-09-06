@@ -12,10 +12,10 @@ int tot_proc;
 unsigned long long seed;
 std::string folder;
 std::string base_name;
-int my_host;
-int tot_host;
 
 #ifdef NP_PER_NODE
+int my_host;
+int tot_host;
 MPI_Group gl_group;
 MPI_Group *host_group = nullptr;
 MPI_Comm *host_comm = nullptr;
@@ -40,9 +40,9 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
   }
   MPI_Barrier(MPI_COMM_WORLD);
   char str[100];
-#ifndef NP_PER_NODE
   snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
-#else
+  base_name = str;
+#ifdef NP_PER_NODE
   tot_host = tot_proc / NP_PER_NODE;
   host_group = new MPI_Group[tot_host];
   host_comm = new MPI_Comm[tot_host];
@@ -62,7 +62,21 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
   my_host = my_proc / NP_PER_NODE;
   snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu_host%d", gl_l.x, eta, eps, rho0, seed, my_host);
 #endif
-  base_name = str;
+}
+
+void output_finalize() {
+#ifdef NP_PER_NODE
+  for (int i = 0; i < tot_host; i++) {
+    if(MPI_GROUP_NULL != host_group[i]) {
+      MPI_Group_free(&host_group[i]);
+    }
+    if (MPI_COMM_NULL != host_comm[i]) {
+      MPI_Comm_free(&host_comm[i]);
+    }
+  }
+  delete[] host_group;
+  delete[] host_comm;
+#endif
 }
 
 // check whether there is error when outputting netcdf file
@@ -123,12 +137,12 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
                              const Vec_2<int>& domain_rank,
                              const Vec_2<int>& gl_cells_size,
                              const Vec_2<int>& my_cells_size)
-                             : frame_len_(NC_UNLIMITED), cg_box_len_(bin_len), my_host_(my_host) {
+                             : frame_len_(NC_UNLIMITED), cg_box_len_(bin_len) {
   time_idx_[0] = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc_);
   set_lin_frame(frame_interval, n_step, first_frame);
   char filename[100];
-  snprintf(filename, 100, "%sfield_%s.nc", folder.c_str(), base_name.c_str());
+  snprintf(filename, 100, "%sfield_%s_host%d.nc", folder.c_str(), base_name.c_str(), my_host);
 
 #ifdef _MSC_VER
   auto stat = nc_create(filename, NC_NETCDF4, &ncid_);
@@ -136,7 +150,7 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
 #ifndef NP_PER_NODE
   auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
 #else
-  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, host_comm[my_host_], MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, host_comm[my_host], MPI_INFO_NULL, &ncid_);
 #endif
 #endif
 
@@ -171,6 +185,14 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   int vel_dims[4] = { frame_dim, spatial_dim, gl_field_dims[0], gl_field_dims[1]};
   stat = nc_def_var(ncid_, "velocity_field", NC_FLOAT, 4, vel_dims, &velocities_id_);
   check_err(stat, __LINE__, __FILE__);
+#ifdef NP_PER_NODE
+  int n_host_id;
+  stat = nc_def_var(ncid_, "host_size", NC_INT, 1, spatial_dims, &n_host_id);
+  check_err(stat, __LINE__, __FILE__);
+  int host_rank_id;
+  stat = nc_def_var(ncid_, "host_rank", NC_INT, 1, spatial_dims, &host_rank_id);
+  check_err(stat, __LINE__, __FILE__);
+#endif
 
 #ifndef _MSC_VER
   stat = nc_var_par_access(ncid_, densities_id_, NC_COLLECTIVE);
@@ -205,6 +227,15 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
 
   stat = nc_put_var(ncid_, spatial_id_, "xy");
   check_err(stat, __LINE__, __FILE__);
+
+#ifdef NP_PER_NODE
+  int n_host[2] = { n_host_.y, n_host_.x };
+  stat = nc_put_var(ncid_, n_host_id, n_host);
+  check_err(stat, __LINE__, __FILE__);
+  int host_rank[2] = { my_host / n_host_.x, my_host % n_host_.x };
+  stat = nc_put_var(ncid_, host_rank_id, host_rank);
+  check_err(stat, __LINE__, __FILE__);
+#endif
 }
 
 void FieldExporter::set_coarse_grain_box(const Vec_2<int>& gl_cells_size,
@@ -212,44 +243,44 @@ void FieldExporter::set_coarse_grain_box(const Vec_2<int>& gl_cells_size,
                                          const Vec_2<int>& domain_rank) {
   if (my_cells_size.x % cg_box_len_ == 0 &&
       my_cells_size.y % cg_box_len_ == 0) {
-#ifndef NP_PER_NODE
-    gl_field_len_[1] = gl_cells_size.x / cg_box_len_;
-    gl_field_len_[0] = gl_cells_size.y / cg_box_len_;
-#else
-    int nx_host;
+    n_host_.x = n_host_.y = 1;
+#ifdef NP_PER_NODE
     if (domain_sizes.x <= NP_PER_NODE && NP_PER_NODE % domain_sizes.x == 0) {
-        nx_host = 1;
+        n_host_.x = 1;
     } else if (domain_sizes.x > NP_PER_NODE && domain_sizes.x % NP_PER_NODE == 0) {
-        nx_host = domain_sizes.x / NP_PER_NODE;   
+        n_host_.x = domain_sizes.x / NP_PER_NODE;   
     } else {
       if (my_proc == 0) {
         std::cerr << "NP_PER_NODE = " << NP_PER_NODE
                   << "domain_sizes.x = " << domain_sizes.x << std::endl;
       }
-      exit(-1);
+      MPI_Abort(MPI_COMM_WORLD, -1);
     }
-    int ny_host = tot_host / nx_host;
-    gl_field_len_[1] = gl_cells_size.x / cg_box_len_ / nx_host;
-    gl_field_len_[0] = gl_cells_size.y / cg_box_len_ / ny_host;
+    n_host_.y = tot_host / n_host_.x;
 #endif
+    gl_field_len_[1] = gl_cells_size.x / cg_box_len_ / n_host_.x;
+    gl_field_len_[0] = gl_cells_size.y / cg_box_len_ / n_host_.y;
+
     size_t my_field_len[2]{my_cells_size.y / cg_box_len_,
                            my_cells_size.x / cg_box_len_ };
 
     den_start_set_[0] = vel_start_set_[0] = 0;
     vel_start_set_[1] = 0;
-    den_start_set_[1] = vel_start_set_[2] = my_field_len[0] * domain_rank.y;
-    den_start_set_[2] = vel_start_set_[3] = my_field_len[1] * domain_rank.x;
+    den_start_set_[1] = vel_start_set_[2] = my_field_len[0] * domain_rank.y % gl_field_len_[0];
+    den_start_set_[2] = vel_start_set_[3] = my_field_len[1] * domain_rank.x % gl_field_len_[1];
 
     den_count_set_[0] = vel_count_set_[0] = 1;
     vel_count_set_[1] = spatial_len_;
     den_count_set_[1] = vel_count_set_[2] = my_field_len[0];
     den_count_set_[2] = vel_count_set_[3] = my_field_len[1];
-    origin_.x = double(den_start_set_[2] * cg_box_len_);
-    origin_.y = double(den_start_set_[1] * cg_box_len_);
+    origin_.x = double(my_field_len[1] * domain_rank.x * cg_box_len_);
+    origin_.y = double(my_field_len[0] * domain_rank.y * cg_box_len_);
 
   } else {
-    std::cerr << "cells size " << gl_cells_size << "are not divisible by box length = "
-      << cg_box_len_ << std::endl;
-    exit(-1);
+    if (my_proc == 0) {
+      std::cerr << "cells size " << my_cells_size << " are not divisible by box length = "
+                << cg_box_len_ << std::endl;
+    }
+    MPI_Abort(MPI_COMM_WORLD, -1);
   }
 }

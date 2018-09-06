@@ -251,7 +251,7 @@ void ParticleExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
       Vec_3<double> vel_mean{};
       Vec_3<double> z_axis_new(0, 0, 1);
       Vec_3<double> y_axis_new(0, 1, 0);
-      Vec_3<double> x_axis_new;
+      Vec_3<double> x_axis_new{};
       float * vel_para_module = nullptr;
       float * theta = nullptr;
       if (flag_vel_) {

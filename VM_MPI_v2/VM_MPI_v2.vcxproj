@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="cellList2D.h" />
     <ClInclude Include="communicator2D.h" />
+    <ClInclude Include="config.h" />
     <ClInclude Include="disorder2D.h" />
     <ClInclude Include="domain2D.h" />
     <ClInclude Include="exporter2D.h" />

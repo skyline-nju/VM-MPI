@@ -34,19 +34,14 @@ void pack_ghost_par(double *buf, int &buf_size,
 
 template <typename TNode>
 void unpack_ghost_par(const double *buf, int buf_size,
-  CellListNode_2<TNode>& cl,
-  std::vector<TNode> &p_arr,
-  int &n_ghost) {
+                      CellListNode_2<TNode>& cl,
+                      std::vector<TNode> &p_arr,
+                      int &n_ghost) {
   const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
-
+  int error = 0;
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
     auto idx_last = p_arr.size();
-    if (idx_last != p_arr.capacity()) {
-      p_arr.emplace_back(&buf[buf_pos]);
-    } else {
-      std::cerr << "the particle number is larger than the capacity of p_arr" << std::endl;
-      exit(-1);
-    }
+    p_arr.emplace_back(&buf[buf_pos]);
     p_arr[idx_last].pos += offset;
     cl.add_node(p_arr[idx_last]);
     n_ghost++;
@@ -55,10 +50,10 @@ void unpack_ghost_par(const double *buf, int buf_size,
 
 template <typename TNode>
 void pack_leaving_par(const std::vector<TNode> &p_arr,
-  std::vector<int> &vacant_pos,
-  CellListNode_2<TNode>& cl,
-  const block_t &block,
-  double *buf, int &buf_size) {
+                      std::vector<int> &vacant_pos,
+                      CellListNode_2<TNode>& cl,
+                      const block_t &block,
+                      double *buf, int &buf_size) {
   const TNode* p0 = &p_arr[0];
   int buf_pos = 0;
   auto f_copy = [&buf_pos, &vacant_pos, p0, buf](TNode **head) {
@@ -78,20 +73,16 @@ void pack_leaving_par(const std::vector<TNode> &p_arr,
 
 template <typename TNode>
 void unpack_arrived_par(const double *buf, int buf_size,
-  CellListNode_2<TNode>& cl,
-  std::vector<TNode> &p_arr,
-  std::vector<int> &vacant_pos) {  //! should be sorted in desending order
+                        CellListNode_2<TNode>& cl,
+                        std::vector<TNode> &p_arr,
+                        std::vector<int> &vacant_pos) {  //! should be sorted in desending order
   const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  int error = 0;
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
     int idx;
     if (vacant_pos.empty()) {
       idx = p_arr.size();
-      if (idx != p_arr.capacity()) {
-        p_arr.emplace_back(&buf[buf_pos]);
-      } else {
-        std::cerr << "the particle number is larger than the capacity of p_arr" << std::endl;
-        exit(-1);
-      }
+      p_arr.emplace_back(&buf[buf_pos]);
     } else {
       idx = vacant_pos.back();
       p_arr[idx] = TNode(&buf[buf_pos]);
@@ -104,8 +95,8 @@ void unpack_arrived_par(const double *buf, int buf_size,
 
 template <typename TPack, typename TUnpack, typename TFunc>
 void comm_par(int prev_proc, int next_proc, int tag_bw, int tag_fw,
-  const block_t &prev_block, const block_t &next_block,
-  int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth) {
+              const block_t &prev_block, const block_t &next_block,
+              int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth) {
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];
@@ -157,6 +148,10 @@ void comm_par_before_interact(const int neighbor_proc[2][2],
   };
 
   auto unpack = [&n_ghost, &cl, &p_arr](double *buf, int buf_size) {
+    int new_size = buf_size / 4 + p_arr.size();
+    if (new_size > p_arr.capacity()) {
+      cl.reserve_particles(p_arr, new_size);
+    }
     unpack_ghost_par(buf, buf_size, cl, p_arr, n_ghost);
   };
 
@@ -235,6 +230,10 @@ void comm_par_after_move(const int neighbor_proc[2][2],
   };
 
   auto unpack = [&p_arr, &vacant_pos, &cl](double *buf, int buf_size) {
+    int new_size = buf_size / 4 + p_arr.size() - vacant_pos.size();
+    if (new_size > p_arr.capacity()) {
+      cl.reserve_particles(p_arr, new_size);
+    }
     unpack_arrived_par(buf, buf_size, cl, p_arr, vacant_pos);
   };
 
