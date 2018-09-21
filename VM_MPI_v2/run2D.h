@@ -1,7 +1,10 @@
 #pragma once
+#include "config.h"
 #include "domain2D.h"
 #include "cellList2D.h"
 #include "disorder2D.h"
+#include "particle2D.h"
+#include "exporter2D.h"
 #include <iomanip>
 
 int ini_my_par_num(int gl_par_num);
@@ -53,15 +56,14 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
 
 template <typename TNode>
 void cal_force(std::vector<TNode> &p_arr,
-  CellListNode_2<TNode> &cl,
-  const Domain_2 &dm) {
+               CellListNode_2<TNode> &cl,
+               const Domain_2 &dm) {
 #ifdef USE_MPI
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   int n_ghost = 0;
-
   comm_par_before_interact(dm.neighbor, dm.inner_shell, dm.max_buf_size(),
-    p_arr, cl, n_ghost);
+                           p_arr, cl, n_ghost);
 #endif
   auto f1 = [](TNode *pi, TNode *pj) {
     pi->interact(*pj);
@@ -72,37 +74,34 @@ void cal_force(std::vector<TNode> &p_arr,
   auto f3 = [](TNode *pi, TNode *pj, const Vec_2<double> &offset) {
     pi->interact(*pj, offset);
   };
-  //cl.for_each_pair_fast(f1, f3);
+  cl.for_each_pair_fast(f1, f3);
   //cl.for_each_pair(f1, f2);
-  cl.for_each_pair_slow(f2);
+  //cl.for_each_pair_slow(f2);
 
 #ifdef USE_MPI
   clear_ghost_after_interact(cl, dm.outer_shell, p_arr, n_ghost);
 #endif
 }
 
-template <typename TNode, typename TRan>
-void integrate(std::vector<TNode>& p_arr, TRan& myran,
-               CellListNode_2<TNode>& cl, const Domain_2 &dm,
-  double eta, double v0) {
+template <typename TNode, typename BiFunc>
+void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
+               const Domain_2& dm, BiFunc f2) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
-    (*it).move(eta, v0, myran, dm);
+    f2(*it, dm);
   }
   cl.recreate(p_arr);
-
 #ifdef USE_MPI
   comm_par_after_move(dm.neighbor, dm.outer_shell, dm.max_buf_size(), p_arr, cl);
 #endif
 }
 
-template <typename TNode, typename TRan>
-void integrate(std::vector<TNode>& p_arr, TRan &myran,
-               CellListNode_2<TNode>& cl, const Domain_2 &dm,
-                double eta, double v0, const RandTorqueArr_2 &torques) {
+template <typename TNode, typename TriFunc>
+void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
+               const Domain_2 dm, TriFunc f3, double h) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
-    (*it).move(eta, v0, torques.get_torque(*it), myran, dm);
+    f3(*it, dm, h);
   }
   cl.recreate(p_arr);
 #ifdef USE_MPI
@@ -112,7 +111,7 @@ void integrate(std::vector<TNode>& p_arr, TRan &myran,
 
 template <typename TNode, typename TInteract, typename TIntegrate>
 void run(std::vector<TNode> &p_arr, int gl_par_num,
-         TInteract interact, TIntegrate integrate,
+         TInteract interact_all, TIntegrate integrate_all,
          int n_step, int sep) {
   int my_rank, tot_proc;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -122,9 +121,9 @@ void run(std::vector<TNode> &p_arr, int gl_par_num,
   int count = 0;
   for (int i = 1; i <= n_step; i++) {
 
-    interact(p_arr);
+    interact_all(p_arr);
 
-    integrate(p_arr);
+    integrate_all(p_arr);
 
     if (i % sep == 0) {
       double phi = 0;
@@ -148,13 +147,21 @@ void run(std::vector<TNode> &p_arr, int gl_par_num,
 }
 
 template <typename TNode, typename TInteract, typename TIntegrate, typename TOut>
-void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
-  TIntegrate integrate, TOut out, int n_step) {
+void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact_all,
+         TIntegrate integrate_all, TOut out, int n_step) {
   for (int i = 1; i <= n_step; i++) {
-    interact(p_arr);
+    interact_all(p_arr);
 
-    integrate(p_arr);
+    integrate_all(p_arr);
 
     out(i, p_arr);
   }
 }
+
+void run_rand_torque(int gl_par_num, const Vec_2<double> &gl_l, double eta,
+                     double eps, int n_step, unsigned long long seed,
+                     double r_cut, double v0);
+
+void run_osc_field(int gl_par_num, const Vec_2<double> &gl_l, double eta,
+                   double h0, int t_half, int n_period, unsigned long long seed,
+                   double r_cut, double v0);

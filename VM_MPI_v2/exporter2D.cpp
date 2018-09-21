@@ -9,12 +9,15 @@ double eps;
 int n_step;
 int my_proc;
 int tot_proc;
+int t_half = 0;
+int t_eq;
+double H0;
 unsigned long long seed;
 std::string folder;
 std::string base_name;
 
+int my_host = 0;
 #ifdef NP_PER_NODE
-int my_host;
 int tot_host;
 MPI_Group gl_group;
 MPI_Group *host_group = nullptr;
@@ -32,7 +35,6 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
   domain_sizes = domain_sizes0;
   rho0 = gl_np / (gl_l.x * gl_l.y);
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
   folder = "data" + delimiter;
   if (my_proc == 0) {
@@ -60,7 +62,51 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
     MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
   }
   my_host = my_proc / NP_PER_NODE;
-  snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu_host%d", gl_l.x, eta, eps, rho0, seed, my_host);
+#endif
+}
+
+void ini_output(int gl_np, double eta0, double h0,
+                int half_t, int t_equil, int steps, unsigned long long sd,
+                const Vec_2<double>& gl_l0, const Vec_2<int>& domain_sizes0) {
+  gl_n_par = gl_np;
+  eta = eta0;
+  H0 = h0;
+  t_half = half_t;
+  t_eq = t_equil;
+  n_step = steps;
+  seed = sd;
+  gl_l = gl_l0;
+  domain_sizes = domain_sizes0;
+  rho0 = gl_np / (gl_l.x * gl_l.y);
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
+  folder = "data" + delimiter;
+  if (my_proc == 0) {
+    mkdir(folder);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  char str[100];
+  snprintf(str, 100, "%g_%.2f_%.2f_%.1f_%d_%d_%llu",
+           gl_l.x, eta, H0, rho0, t_half, t_eq, seed);
+  base_name = str;
+#ifdef NP_PER_NODE
+  tot_host = tot_proc / NP_PER_NODE;
+  host_group = new MPI_Group[tot_host];
+  host_comm = new MPI_Comm[tot_host];
+  MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
+  for (int i = 0; i < tot_host; i++) {
+    int *rank_arr = new int[NP_PER_NODE];
+    for (int j = 0; j < NP_PER_NODE; j++) {
+      rank_arr[j] = j + i * NP_PER_NODE;
+    }
+    MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
+    delete[] rank_arr;
+  }
+
+  for (int i = 0; i < tot_host; i++) {
+    MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
+  }
+  my_host = my_proc / NP_PER_NODE;
 #endif
 }
 
@@ -114,6 +160,11 @@ LogExporter::LogExporter(int interval)
   fout_ << "\nblock sizes=" << domain_sizes;
   fout_ << "\nn_step=" << n_step;
   fout_ << "\nseed=" << seed;
+#ifdef SCALAR_NOISE
+  fout_ << "\nscalar noise";
+#else
+  fout_ << "\nvectorial noise";
+#endif
   fout_ << "\n\n-------- RUN --------";
   fout_ << "\ntime step\telapsed time" << std::endl;
 }
@@ -204,9 +255,28 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
 #endif
 
   /* assign global attributes */
-  stat = nc_put_att_double(ncid_, NC_GLOBAL, "eta", NC_DOUBLE, 1, &eta);
+  if (t_half > 0) {
+    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d with external field");
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_att_int(ncid_, NC_GLOBAL, "t_half", NC_INT, 1, &t_half);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_att_int(ncid_, NC_GLOBAL, "t_equil", NC_INT, 1, &t_eq);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_att_double(ncid_, NC_GLOBAL, "h0", NC_DOUBLE, 1, &H0);
+    check_err(stat, __LINE__, __FILE__);
+  } else {
+    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d with random torques");
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_att_double(ncid_, NC_GLOBAL, "epsilon", NC_DOUBLE, 1, &eps);
+    check_err(stat, __LINE__, __FILE__);
+  }
+#ifdef SCALAR_NOISE
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 5, "scalar");
+#else
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 9, "vectorial");
+#endif
   check_err(stat, __LINE__, __FILE__);
-  stat = nc_put_att_double(ncid_, NC_GLOBAL, "epsilon", NC_DOUBLE, 1, &eps);
+  stat = nc_put_att_double(ncid_, NC_GLOBAL, "eta", NC_DOUBLE, 1, &eta);
   check_err(stat, __LINE__, __FILE__);
   stat = nc_put_att_double(ncid_, NC_GLOBAL, "rho_0", NC_DOUBLE, 1, &rho0);
   check_err(stat, __LINE__, __FILE__);

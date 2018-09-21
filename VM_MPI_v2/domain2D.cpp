@@ -111,6 +111,15 @@ void Domain_2::set_max_buf_size(int gl_par_num, double amplification) {
   }
 }
 
+void Domain_2::tangle(Vec_2<double>& pos) const {
+  if (!flag_comm_.x) {
+    tangle_1(pos.x, gl_l_.x);
+  }
+  if (!flag_comm_.y) {
+    tangle_1(pos.y, gl_l_.y);
+  }
+}
+
 Vec_2<int> Domain_2::partition(const Vec2d& l, int n_proc) {
   if (n_proc == 1) {
     return Vec_2<int>(1, 1);

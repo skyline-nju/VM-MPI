@@ -31,7 +31,7 @@ public:
 
   void set_max_buf_size(int gl_par_num, double amplification);
 
-
+  void tangle(Vec_2<double> &pos) const;
 
   const Vec2d & l() const { return l_; }
   const Vec2d & gl_l() const { return gl_l_; }

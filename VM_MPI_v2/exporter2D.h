@@ -12,6 +12,10 @@
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
                 const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
 
+void ini_output(int gl_np, double eta0, double h0,
+                int half_t, int t_equil, int steps, unsigned long long sd,
+                const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
+
 void output_finalize();
 
 // check whether there is error when outputting netcdf file
@@ -110,9 +114,7 @@ private:
   Vec_2<double> origin_;
   size_t time_idx_[1];
 
-#ifdef NP_PER_NODE
   Vec_2<int> n_host_{};
-#endif
 };
 
 template <typename TPar, typename T1, typename T2>
