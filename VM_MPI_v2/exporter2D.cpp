@@ -192,16 +192,15 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   time_idx_[0] = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc_);
   set_lin_frame(frame_interval, n_step, first_frame);
-  char filename[100];
-  snprintf(filename, 100, "%sfield_%s_host%d.nc", folder.c_str(), base_name.c_str(), my_host);
+  snprintf(filename_, 100, "%sfield_%s_host%d.nc", folder.c_str(), base_name.c_str(), my_host);
 
 #ifdef _MSC_VER
-  auto stat = nc_create(filename, NC_NETCDF4, &ncid_);
+  auto stat = nc_create(filename_, NC_NETCDF4, &ncid_);
 #else
 #ifndef NP_PER_NODE
-  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
 #else
-  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, host_comm[my_host], MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, host_comm[my_host], MPI_INFO_NULL, &ncid_);
 #endif
 #endif
 
@@ -242,15 +241,6 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   check_err(stat, __LINE__, __FILE__);
   int host_rank_id;
   stat = nc_def_var(ncid_, "host_rank", NC_INT, 1, spatial_dims, &host_rank_id);
-  check_err(stat, __LINE__, __FILE__);
-#endif
-
-#ifndef _MSC_VER
-  stat = nc_var_par_access(ncid_, densities_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  stat = nc_var_par_access(ncid_, velocities_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  stat = nc_var_par_access(ncid_, time_id_, NC_COLLECTIVE);
   check_err(stat, __LINE__, __FILE__);
 #endif
 
@@ -306,6 +296,23 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   stat = nc_put_var(ncid_, host_rank_id, host_rank);
   check_err(stat, __LINE__, __FILE__);
 #endif
+  stat = nc_close(ncid_);
+  check_err(stat, __LINE__, __FILE__);
+}
+
+void FieldExporter::open() {
+#ifdef _MSC_VER
+  auto stat = nc_open(filename_, NC_WRITE, &ncid_);
+#else
+#ifndef NP_PER_NODE
+  auto stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, MPI_COMM_WORLD,
+                          MPI_INFO_NULL, &ncid_);
+#else
+  auto stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, host_comm[my_host],
+                          MPI_INFO_NULL, &ncid_);
+#endif
+#endif
+  check_err(stat, __LINE__, __FILE__);
 }
 
 void FieldExporter::set_coarse_grain_box(const Vec_2<int>& gl_cells_size,

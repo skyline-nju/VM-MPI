@@ -95,7 +95,6 @@ public:
                         const Vec_3<int> &domain_rank,
                         const Vec_3<int> &gl_cells_size,
                         const Vec_3<int> &my_cells_size);
-  ~FieldExporter();
 
   void set_coarse_grain_box(const Vec_3<int> &gl_cells_size,
                             const Vec_3<int> &my_cells_size,
@@ -115,6 +114,7 @@ private:
   int velocities_id_;
 
   int my_proc_;
+  char filename_[100];
 
   size_t frame_len_;
   size_t spatial_len_ = 3;
@@ -153,8 +153,16 @@ void FieldExporter::coarse_grain(const std::vector<TPar>& p_arr,
 template <typename TPar>
 void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
+    int stat = nc_open_par(filename_, NC_WRITE|NC_MPIIO,
+                           MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+    check_err(stat, __LINE__, __FILE__);
+
     /* time step */
-    int stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
+    stat = nc_inq_varid(ncid_, "time", &time_id_);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, time_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
     check_err(stat, __LINE__, __FILE__);
 
     /* fields */
@@ -166,20 +174,29 @@ void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     
     //std::cout << "density start set\t" << den_start_set_[0] << "\t" << den_start_set_[1] << "\t" << den_start_set_[2] << "\t" << den_start_set_[3] << std::endl;
     //std::cout << "density count set\t" << den_count_set_[0] << "\t" << den_count_set_[1] << "\t" << den_count_set_[2] << "\t" << den_count_set_[3] << std::endl;
+    stat = nc_inq_varid(ncid_, "density_field", &densities_id_);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, densities_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
     stat = nc_put_vara(ncid_, densities_id_, den_start_set_, den_count_set_, den_fields);
     check_err(stat, __LINE__, __FILE__);
 
     //std::cout << "velocity start set\t" << vel_start_set_[0] << "\t" << vel_start_set_[1] << "\t" << vel_start_set_[2] << "\t" << vel_start_set_[3] << "\t" << vel_start_set_[4] << std::endl;
     //std::cout << "velocity count set\t" << vel_count_set_[0] << "\t" << vel_count_set_[1] << "\t" << vel_count_set_[2] << "\t" << vel_count_set_[3] << "\t" << vel_count_set_[4] << std::endl;
+    stat = nc_inq_varid(ncid_, "velocity_field", &velocities_id_);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, velocities_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
     stat = nc_put_vara(ncid_, velocities_id_, vel_start_set_, vel_count_set_, vel_fields);
     check_err(stat, __LINE__, __FILE__);
     time_idx_[0]++;
     den_start_set_[0]++;
     vel_start_set_[0]++;
 
-    nc_sync(ncid_);
     delete[] den_fields;
     delete[] vel_fields;
+    stat = nc_close(ncid_);
+    check_err(stat, __LINE__, __FILE__);
   }
 }
 
@@ -188,7 +205,6 @@ public:
   explicit ParticleExporter(int frame_interval, int first_frame,
                             bool flag_vel = false, bool flag_ori=true);
 
-  ~ParticleExporter();
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar> &p_arr);
@@ -207,6 +223,7 @@ private:
   int vel_mean_id_;
   int vel_parallel_id_;
   int theta_id_;
+  char filename_[100];
 
   /* dimension lengths */
   const size_t frame_len_;
@@ -225,15 +242,29 @@ private:
 template<typename TPar>
 void ParticleExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
-    /* time step */
-    int stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
+    int stat = nc_open_par(filename_, NC_WRITE|NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
     check_err(stat, __LINE__, __FILE__);
-
+    /* time step */
+    stat = nc_inq_varid(ncid_, "time", &time_id_);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, time_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
+    check_err(stat, __LINE__, __FILE__);
     /* cell origin and lengths */
     {
       size_t startset[2] = { time_idx_[0], 0 };
       size_t countset[2] = { 1, cell_spatial_len_ };
+      stat = nc_inq_varid(ncid_, "cell_lengths", &cell_lengths_id_);
+      check_err(stat, __LINE__, __FILE__);
+      stat = nc_var_par_access(ncid_, cell_lengths_id_, NC_COLLECTIVE);
+      check_err(stat, __LINE__, __FILE__);
       stat = nc_put_vara(ncid_, cell_lengths_id_, startset, countset, cell_lengths_data_);
+      check_err(stat, __LINE__, __FILE__);
+
+      stat = nc_inq_varid(ncid_, "cell_origin", &cell_origin_id_);
+      check_err(stat, __LINE__, __FILE__);
+      stat = nc_var_par_access(ncid_, cell_origin_id_, NC_COLLECTIVE);
       check_err(stat, __LINE__, __FILE__);
       stat = nc_put_vara(ncid_, cell_origin_id_, startset, countset, cell_origin_data_);
       check_err(stat, __LINE__, __FILE__);
@@ -283,21 +314,41 @@ void ParticleExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
         }
       }
 
+      stat = nc_inq_varid(ncid_, "coordinates", &coordinates_id_);
+      check_err(stat, __LINE__, __FILE__);
+      stat = nc_var_par_access(ncid_, coordinates_id_, NC_COLLECTIVE);
+      check_err(stat, __LINE__, __FILE__);
       stat = nc_put_vara(ncid_, coordinates_id_, startset, countset, coordinates_buf);
       check_err(stat, __LINE__, __FILE__);
       if (flag_vel_) {
+        stat = nc_inq_varid(ncid_, "velocities", &velocities_id_);
+        check_err(stat, __LINE__, __FILE__);
+        stat = nc_var_par_access(ncid_, velocities_id_, NC_COLLECTIVE);
+        check_err(stat, __LINE__, __FILE__);
         stat = nc_put_vara(ncid_, velocities_id_, startset, countset, velocities_buf);
         check_err(stat, __LINE__, __FILE__);
       }
       if (flag_ori_) {
         size_t startset1[2] = { time_idx_[0], 0 };
         size_t countset1[2] = { 1, spatial_len_ };
+        stat = nc_inq_varid(ncid_, "mean_velocities", &vel_mean_id_);
+        check_err(stat, __LINE__, __FILE__);
+        stat = nc_var_par_access(ncid_, vel_mean_id_, NC_COLLECTIVE);
+        check_err(stat, __LINE__, __FILE__);
         stat = nc_put_vara(ncid_, vel_mean_id_, startset1, countset1, &vel_mean.x);
         check_err(stat, __LINE__, __FILE__);
 
         size_t startset2[2] = { time_idx_[0], particle_begin };
         size_t countset2[2] = { 1, particle_count};
+        stat = nc_inq_varid(ncid_, "v_parallel", &vel_parallel_id_);
+        check_err(stat, __LINE__, __FILE__);
+        stat = nc_var_par_access(ncid_, vel_parallel_id_, NC_COLLECTIVE);
+        check_err(stat, __LINE__, __FILE__);
         stat = nc_put_vara(ncid_, vel_parallel_id_, startset2, countset2, vel_para_module);
+        check_err(stat, __LINE__, __FILE__);
+        stat = nc_inq_varid(ncid_, "theta_for_v_perp", &theta_id_);
+        check_err(stat, __LINE__, __FILE__);
+        stat = nc_var_par_access(ncid_, theta_id_, NC_COLLECTIVE);
         check_err(stat, __LINE__, __FILE__);
         stat = nc_put_vara(ncid_, theta_id_, startset2, countset2, theta);
         check_err(stat, __LINE__, __FILE__);
@@ -309,6 +360,7 @@ void ParticleExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
       delete[] theta;
     }
     time_idx_[0] += 1;
-    nc_sync(ncid_);
+    stat = nc_close(ncid_);
+    check_err(stat, __LINE__, __FILE__);
   }
 }

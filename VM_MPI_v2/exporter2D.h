@@ -92,6 +92,8 @@ public:
   template<typename TPar>
   void dump(int i_step, const std::vector<TPar> &p_arr);
 
+  void open();
+
 private:
   int ncid_;
   int time_id_;
@@ -100,6 +102,7 @@ private:
   int velocities_id_;
 
   int my_proc_;
+  char filename_[100];
 
   size_t frame_len_;
   size_t spatial_len_ = 2;
@@ -136,11 +139,29 @@ void FieldExporter::coarse_grain(const std::vector<TPar>& p_arr,
 template <typename TPar>
 void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
-    /* time step */
-    int stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
+    open();
+    /* inquire varid */
+    int stat = nc_inq_varid(ncid_, "time", &time_id_);
     check_err(stat, __LINE__, __FILE__);
 
-    /* fields */
+    stat = nc_inq_varid(ncid_, "density_field", &densities_id_);
+    check_err(stat, __LINE__, __FILE__);
+
+    stat = nc_inq_varid(ncid_, "velocity_field", &velocities_id_);
+    check_err(stat, __LINE__, __FILE__);
+
+#ifndef _MSC_VER
+    stat = nc_var_par_access(ncid_, densities_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, velocities_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_var_par_access(ncid_, time_id_, NC_COLLECTIVE);
+    check_err(stat, __LINE__, __FILE__);
+#endif
+    /* dump variables */
+    stat = nc_put_var1(ncid_, time_id_, time_idx_, &i_step);
+    check_err(stat, __LINE__, __FILE__);
+
     const size_t field_size = den_count_set_[1] * den_count_set_[2];
     unsigned short* den_fields = new unsigned short[field_size] {};
     float* vel_fields = new float[2 * field_size]{};
@@ -156,8 +177,9 @@ void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     den_start_set_[0]++;
     vel_start_set_[0]++;
 
-    nc_sync(ncid_);
     delete[] den_fields;
     delete[] vel_fields;
+    stat = nc_close(ncid_);
+    check_err(stat, __LINE__, __FILE__);
   }
 }

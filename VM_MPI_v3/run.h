@@ -169,7 +169,16 @@ void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
 template <typename TNode, typename TInteract, typename TIntegrate, typename TOut>
 void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact,
          TIntegrate integrate, TOut out, int n_step) {
+  int my_rank, tot_proc;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  auto t1 = std::chrono::system_clock::now();
   for (int i = 1; i <= n_step; i++) {
+    if (my_rank == 0 && i % 1000 == 0) {
+      auto t2 = std::chrono::system_clock::now();
+      std::chrono::duration<double> elapsed_time = t2 - t1;
+      std::cout << "t = " << i << "\telapsed seconds = " << elapsed_time.count() << std::endl;
+    }
     interact(p_arr);
 
     integrate(p_arr);

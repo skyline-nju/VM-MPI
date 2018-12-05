@@ -105,12 +105,11 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   time_idx_[0] = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc_);
   set_lin_frame(frame_interval, n_step, first_frame);
-  char filename[100];
-  snprintf(filename, 100, "%sfield_%s.nc", folder.c_str(), base_name.c_str());
+  snprintf(filename_, 100, "%sfield_%s.nc", folder.c_str(), base_name.c_str());
 #ifdef _MSC_VER
-  auto stat = nc_create(filename, NC_NETCDF4, &ncid_);
+  auto stat = nc_create(filename_, NC_NETCDF4, &ncid_);
 #else
-  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
 #endif
   check_err(stat, __LINE__, __FILE__);
 
@@ -181,10 +180,8 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
 
   stat = nc_put_var(ncid_, spatial_id_, "xyz");
   check_err(stat, __LINE__, __FILE__);
-}
 
-FieldExporter::~FieldExporter() {
-  const auto stat = nc_close(ncid_);
+  stat = nc_close(ncid_);
   check_err(stat, __LINE__, __FILE__);
 }
 
@@ -236,12 +233,11 @@ ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool fla
   gl_np_ = gl_n_par;
 
   /* open file */
-  char filename[100];
-  snprintf(filename, 100, "%ssnap_%s.nc", folder.c_str(), base_name.c_str());
+  snprintf(filename_, 100, "%ssnap_%s.nc", folder.c_str(), base_name.c_str());
 #ifdef _MSC_VER
-  auto stat = nc_create(filename, NC_NETCDF4, &ncid_);
+  auto stat = nc_create(filename_, NC_NETCDF4, &ncid_);
 #else
-  auto stat = nc_create_par(filename, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
 #endif
   check_err(stat, __LINE__, __FILE__);
 
@@ -300,29 +296,6 @@ ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool fla
     check_err(stat, __LINE__, __FILE__);
   }
 
-#ifndef _MSC_VER
-  stat = nc_var_par_access(ncid_, time_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  stat = nc_var_par_access(ncid_, cell_lengths_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  stat = nc_var_par_access(ncid_, cell_origin_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  stat = nc_var_par_access(ncid_, coordinates_id_, NC_COLLECTIVE);
-  check_err(stat, __LINE__, __FILE__);
-  if (flag_vel_) {
-    stat = nc_var_par_access(ncid_, velocities_id_, NC_COLLECTIVE);
-    check_err(stat, __LINE__, __FILE__);
-  }
-  if (flag_ori_) {
-    stat = nc_var_par_access(ncid_, vel_mean_id_, NC_COLLECTIVE);
-    check_err(stat, __LINE__, __FILE__);
-    stat = nc_var_par_access(ncid_, vel_parallel_id_, NC_COLLECTIVE);
-    check_err(stat, __LINE__, __FILE__);
-    stat = nc_var_par_access(ncid_, theta_id_, NC_COLLECTIVE);
-    check_err(stat, __LINE__, __FILE__);
-  }
-#endif
-
   /* assign global attributes */
   stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 18, "Vicsek model in 3d");
   check_err(stat, __LINE__, __FILE__);
@@ -365,10 +338,7 @@ ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool fla
   check_err(stat, __LINE__, __FILE__);
   stat = nc_put_var(ncid_, cell_spatial_id_, "abc");
   check_err(stat, __LINE__, __FILE__);
-}
 
-ParticleExporter::~ParticleExporter() {
-  const auto stat = nc_close(ncid_);
+  stat = nc_close(ncid_);
   check_err(stat, __LINE__, __FILE__);
 }
-
