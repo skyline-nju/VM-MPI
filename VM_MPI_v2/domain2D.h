@@ -68,7 +68,8 @@ protected:
 
 template <typename TNode>
 Domain_2::Domain_2(const Vec2d& gl_l, CellListNode_2<TNode>** cl, double r_cut)
-  : gl_l_(gl_l), gl_half_l_(gl_l * 0.5), gl_size_(partition(gl_l_)) {
+                  : gl_l_(gl_l), gl_half_l_(gl_l * 0.5),
+                    gl_size_(partition(gl_l_)) {
   Vec_2<double> cell_len{};
   CellListNode_2<TNode>::partition(gl_l_, r_cut, gl_cells_size_, cell_len);
   find_neighbor(rank_, flag_comm_, neighbor);

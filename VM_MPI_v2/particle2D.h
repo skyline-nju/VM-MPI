@@ -43,13 +43,16 @@ public:
   template <class TRan>
   void move_field(double eta, double v0, double h, TRan &myran, const Domain_2 &domain);
 
+  template <class TRan>
+  void move_density_noise(double eta, double v0, double eps, TRan &myran, const Domain_2 &domain);
+
   void copy(double* dest, int& idx) const;
 
   Vec_2<double> pos;
   Vec_2<double> ori;
   Vec_2<double> ori_next;
-#ifndef SCALAR_NOISE
-  int n_neighbor = 1;
+#ifdef COUNT_NEIGHBOR
+  int n_neighbor = 0;
 #endif
 };
 
@@ -68,8 +71,9 @@ void VicsekPar_2::interact(Par& p) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
-#ifndef SCALAR_NOISE
+#ifdef COUNT_NEIGHBOR
     n_neighbor++;
+    p.n_neighbor++;
 #endif
   }
 }
@@ -80,8 +84,9 @@ void VicsekPar_2::interact(Par& p, const Vec_2<double>& offset) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
-#ifndef SCALAR_NOISE
+#ifdef COUNT_NEIGHBOR
     n_neighbor++;
+    p.n_neighbor++;
 #endif
   }
 }
@@ -99,8 +104,9 @@ void VicsekPar_2::interact(Par& p, const Domain_2& domain) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
-#ifndef SCALAR_NOISE
+#ifdef COUNT_NEIGHBOR
     n_neighbor++;
+    p.n_neighbor++;
 #endif
   }
 }
@@ -170,14 +176,15 @@ void VicsekPar_2::move_field(double eta, double v0, double h, TRan& myran) {
   const double ori_next_module = ori_next.module();
   ori_next.x += h * ori_next_module;
 #ifdef SCALAR_NOISE
-  ori_next.normalize();
-  const double c1 = ori_next.x;
-  const double s1 = ori_next.y;
-  const double theta = (myran.doub() - 0.5) * eta * PI * 2 + torque;
-  const double c2 = std::cos(theta);
-  const double s2 = std::sin(theta);
-  ori.x = ori_next.x = c1 * c2 - s1 * s2;
-  ori.y = ori_next.y = c1 * s2 + c2 * s1;
+  // todo
+  // ori_next.normalize();
+  // const double c1 = ori_next.x;
+  // const double s1 = ori_next.y;
+  // const double theta = (myran.doub() - 0.5) * eta * PI * 2 + torque;
+  // const double c2 = std::cos(theta);
+  // const double s2 = std::sin(theta);
+  // ori.x = ori_next.x = c1 * c2 - s1 * s2;
+  // ori.y = ori_next.y = c1 * s2 + c2 * s1;
 #else
   Vec_2<double> rand_unit_vec{};
   circle_point_picking(rand_unit_vec.x, rand_unit_vec.y, myran);
@@ -192,6 +199,33 @@ void VicsekPar_2::move_field(double eta, double v0, double h, TRan& myran) {
 template <class TRan>
 void VicsekPar_2::move_field(double eta, double v0, double h, TRan& myran, const Domain_2& domain) {
   move_field(eta, v0, h, myran);
+  domain.tangle(pos);
+}
+
+template <class TRan>
+void VicsekPar_2::move_density_noise(double eta, double v0, double eps, TRan &myran, const Domain_2& domain) {
+#ifdef SCALAR_NOISE
+  ori_next.normalize();
+  const double c1 = ori_next.x;
+  const double s1 = ori_next.y;
+
+  const double theta = (myran.doub() - 0.5) * eta * PI * 2 + n_neighbor * (myran.doub() - 0.5) * eps * PI * 2;
+  const double c2 = std::cos(theta);
+  const double s2 = std::sin(theta);
+  ori.x = ori_next.x = c1 * c2 - s1 * s2;
+  ori.y = ori_next.y = c1 * s2 + c2 * s1;
+  n_neighbor = 0;
+#else
+  //todo
+  Vec_2<double> rand_unit_vec{};
+  circle_point_picking(rand_unit_vec.x, rand_unit_vec.y, myran);
+  ori_next += eta * n_neighbor * rand_unit_vec;
+  ori_next.normalize();
+  ori_next.rotate(torque);
+  ori = ori_next;
+  n_neighbor = 0;
+#endif
+  pos += v0 * ori;
   domain.tangle(pos);
 }
 

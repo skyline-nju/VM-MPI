@@ -16,17 +16,17 @@ int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  double L = 4800;
+  double L = atof(argv[1]);
   Vec_2<double> gl_l(L, L);
-  double eta = 0.18;
-  double eps = atof(argv[1]);
+  double eta = atof(argv[2]);
+  double eps = atof(argv[3]);
   double rho0 = 1;
   unsigned long long seed = 1;
   Ranq1 myran(seed + my_rank);
-  int n_step = 2000000;
+  int n_step = 3000000;
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
 
-  run_rand_torque(gl_par_num, gl_l, eta, eps, n_step, seed, r_cut, v0);
+  run_density_noise(gl_par_num, gl_l, eta, eps, n_step, seed, r_cut, v0);
 }

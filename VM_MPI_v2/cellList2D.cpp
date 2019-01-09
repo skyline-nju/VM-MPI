@@ -1,7 +1,7 @@
 #include "cellList2D.h"
 
 const int CellListBase_2::cell_offset[4][2] = {
-  // {y, x}
+  // {offset_y, offset_x}
   { 0,  1 },
   { 1, -1 },
   { 1,  0 },
@@ -10,12 +10,12 @@ const int CellListBase_2::cell_offset[4][2] = {
 
 
 CellListBase_2::CellListBase_2(const Vec2d & l,
-  double r_cut,
-  const Vec2d &gl_l,
-  const Vec2d & origin,
-  const Vec_2<bool>& flag_ext)
-  : n_(), origin_(origin), inverse_lc_(), l_(l), gl_l_(gl_l),
-  flag_ext_(flag_ext) {
+                               double r_cut,
+                               const Vec2d &gl_l,
+                               const Vec2d & origin,
+                               const Vec_2<bool>& flag_ext)
+                               : n_(), origin_(origin), inverse_lc_(), l_(l), gl_l_(gl_l),
+                               flag_ext_(flag_ext) {
   for (int dim = 0; dim < 2; dim++) {
     n_[dim] = int(l[dim] / r_cut);
     inverse_lc_[dim] = n_[dim] / l[dim];
@@ -29,12 +29,12 @@ CellListBase_2::CellListBase_2(const Vec2d & l,
 }
 
 CellListBase_2::CellListBase_2(const Vec_2<int> &cell_size,
-  const Vec2d& lc,
-  const Vec2d &gl_l,
-  const Vec2d& origin,
-  const Vec_2<bool>& flag_ext)
-  : n_(cell_size), origin_(origin), inverse_lc_(),
-  l_(lc * n_), gl_l_(gl_l), flag_ext_(flag_ext) {
+                               const Vec2d& lc,
+                               const Vec2d &gl_l,
+                               const Vec2d& origin,
+                               const Vec_2<bool>& flag_ext)
+                               : n_(cell_size), origin_(origin), inverse_lc_(),
+                               l_(lc * n_), gl_l_(gl_l), flag_ext_(flag_ext) {
   for (int dim = 0; dim < 2; dim++) {
     inverse_lc_[dim] = 1 / lc[dim];
     if (flag_ext[dim]) {
@@ -57,6 +57,7 @@ void CellListBase_2::partition(const Vec_2<double>& l, double r_cut,
 
 /**
  * @brief Get a vector to offset the periodic boundary condition
+ * !!! The function cannot give correct results for unknown reasons.
  *
  * @param pos             Position of a particle
  * @return Vec_2<double>

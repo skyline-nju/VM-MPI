@@ -42,27 +42,32 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
   }
   MPI_Barrier(MPI_COMM_WORLD);
   char str[100];
-  snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
+  if (gl_l.x == gl_l.y) {
+    snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
+  } else {
+    snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
+  }
   base_name = str;
-#ifdef NP_PER_NODE
-  tot_host = tot_proc / NP_PER_NODE;
-  host_group = new MPI_Group[tot_host];
-  host_comm = new MPI_Comm[tot_host];
-  MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
-  for (int i = 0; i < tot_host; i++) {
-    int *rank_arr = new int[NP_PER_NODE];
-    for (int j = 0; j < NP_PER_NODE; j++) {
-      rank_arr[j] = j + i * NP_PER_NODE;
+  if (tot_proc > NP_PER_NODE) {
+    tot_host = tot_proc / NP_PER_NODE;
+    host_group = new MPI_Group[tot_host];
+    host_comm = new MPI_Comm[tot_host];
+    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
+    for (int i = 0; i < tot_host; i++) {
+      int *rank_arr = new int[NP_PER_NODE];
+      for (int j = 0; j < NP_PER_NODE; j++) {
+        rank_arr[j] = j + i * NP_PER_NODE;
+      }
+      MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
+      delete[] rank_arr;
     }
-    MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
-    delete[] rank_arr;
+
+    for (int i = 0; i < tot_host; i++) {
+      MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
+    }
+    my_host = my_proc / NP_PER_NODE;
   }
 
-  for (int i = 0; i < tot_host; i++) {
-    MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
-  }
-  my_host = my_proc / NP_PER_NODE;
-#endif
 }
 
 void ini_output(int gl_np, double eta0, double h0,
@@ -89,40 +94,41 @@ void ini_output(int gl_np, double eta0, double h0,
   snprintf(str, 100, "%g_%.2f_%.2f_%.1f_%d_%d_%llu",
            gl_l.x, eta, H0, rho0, t_half, t_eq, seed);
   base_name = str;
-#ifdef NP_PER_NODE
-  tot_host = tot_proc / NP_PER_NODE;
-  host_group = new MPI_Group[tot_host];
-  host_comm = new MPI_Comm[tot_host];
-  MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
-  for (int i = 0; i < tot_host; i++) {
-    int *rank_arr = new int[NP_PER_NODE];
-    for (int j = 0; j < NP_PER_NODE; j++) {
-      rank_arr[j] = j + i * NP_PER_NODE;
-    }
-    MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
-    delete[] rank_arr;
-  }
 
-  for (int i = 0; i < tot_host; i++) {
-    MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
+  if (tot_proc > NP_PER_NODE) {
+    tot_host = tot_proc / NP_PER_NODE;
+    host_group = new MPI_Group[tot_host];
+    host_comm = new MPI_Comm[tot_host];
+    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
+    for (int i = 0; i < tot_host; i++) {
+      int *rank_arr = new int[NP_PER_NODE];
+      for (int j = 0; j < NP_PER_NODE; j++) {
+        rank_arr[j] = j + i * NP_PER_NODE;
+      }
+      MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
+      delete[] rank_arr;
+    }
+
+    for (int i = 0; i < tot_host; i++) {
+      MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
+    }
+    my_host = my_proc / NP_PER_NODE;
   }
-  my_host = my_proc / NP_PER_NODE;
-#endif
 }
 
 void output_finalize() {
-#ifdef NP_PER_NODE
-  for (int i = 0; i < tot_host; i++) {
-    if(MPI_GROUP_NULL != host_group[i]) {
-      MPI_Group_free(&host_group[i]);
+  if (tot_proc > NP_PER_NODE) {
+    for (int i = 0; i < tot_host; i++) {
+      if(MPI_GROUP_NULL != host_group[i]) {
+        MPI_Group_free(&host_group[i]);
+      }
+      if (MPI_COMM_NULL != host_comm[i]) {
+        MPI_Comm_free(&host_comm[i]);
+      }
     }
-    if (MPI_COMM_NULL != host_comm[i]) {
-      MPI_Comm_free(&host_comm[i]);
-    }
+    delete[] host_group;
+    delete[] host_comm;
   }
-  delete[] host_group;
-  delete[] host_comm;
-#endif
 }
 
 // check whether there is error when outputting netcdf file
@@ -160,7 +166,7 @@ LogExporter::LogExporter(int interval)
   fout_ << "\nblock sizes=" << domain_sizes;
   fout_ << "\nn_step=" << n_step;
   fout_ << "\nseed=" << seed;
-#ifdef SCALAR_NOISE
+#ifdef COUNT_NEIGHBOR
   fout_ << "\nscalar noise";
 #else
   fout_ << "\nvectorial noise";
@@ -194,14 +200,15 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   set_lin_frame(frame_interval, n_step, first_frame);
   snprintf(filename_, 100, "%sfield_%s_host%d.nc", folder.c_str(), base_name.c_str(), my_host);
 
+  int stat;
 #ifdef _MSC_VER
-  auto stat = nc_create(filename_, NC_NETCDF4, &ncid_);
+  stat = nc_create(filename_, NC_NETCDF4, &ncid_);
 #else
-#ifndef NP_PER_NODE
-  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
-#else
-  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, host_comm[my_host], MPI_INFO_NULL, &ncid_);
-#endif
+  if (tot_proc <= NP_PER_NODE) {
+    stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+  } else {
+    stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, host_comm[my_host], MPI_INFO_NULL, &ncid_);
+  }
 #endif
 
   check_err(stat, __LINE__, __FILE__);
@@ -235,14 +242,15 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   int vel_dims[4] = { frame_dim, spatial_dim, gl_field_dims[0], gl_field_dims[1]};
   stat = nc_def_var(ncid_, "velocity_field", NC_FLOAT, 4, vel_dims, &velocities_id_);
   check_err(stat, __LINE__, __FILE__);
-#ifdef NP_PER_NODE
+
   int n_host_id;
-  stat = nc_def_var(ncid_, "host_size", NC_INT, 1, spatial_dims, &n_host_id);
-  check_err(stat, __LINE__, __FILE__);
   int host_rank_id;
-  stat = nc_def_var(ncid_, "host_rank", NC_INT, 1, spatial_dims, &host_rank_id);
-  check_err(stat, __LINE__, __FILE__);
-#endif
+  if (tot_proc > NP_PER_NODE) {
+    stat = nc_def_var(ncid_, "host_size", NC_INT, 1, spatial_dims, &n_host_id);
+    check_err(stat, __LINE__, __FILE__);
+    stat = nc_def_var(ncid_, "host_rank", NC_INT, 1, spatial_dims, &host_rank_id);
+    check_err(stat, __LINE__, __FILE__);
+  }
 
   /* assign global attributes */
   if (t_half > 0) {
@@ -260,7 +268,7 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
     stat = nc_put_att_double(ncid_, NC_GLOBAL, "epsilon", NC_DOUBLE, 1, &eps);
     check_err(stat, __LINE__, __FILE__);
   }
-#ifdef SCALAR_NOISE
+#ifdef COUNT_NEIGHBOR
   stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 5, "scalar");
 #else
   stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 9, "vectorial");
@@ -288,29 +296,30 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   stat = nc_put_var(ncid_, spatial_id_, "xy");
   check_err(stat, __LINE__, __FILE__);
 
-#ifdef NP_PER_NODE
-  int n_host[2] = { n_host_.y, n_host_.x };
-  stat = nc_put_var(ncid_, n_host_id, n_host);
-  check_err(stat, __LINE__, __FILE__);
-  int host_rank[2] = { my_host / n_host_.x, my_host % n_host_.x };
-  stat = nc_put_var(ncid_, host_rank_id, host_rank);
-  check_err(stat, __LINE__, __FILE__);
-#endif
+  if (tot_proc > NP_PER_NODE) {
+    int n_host[2] = { n_host_.y, n_host_.x };
+    stat = nc_put_var(ncid_, n_host_id, n_host);
+    check_err(stat, __LINE__, __FILE__);
+    int host_rank[2] = { my_host / n_host_.x, my_host % n_host_.x };
+    stat = nc_put_var(ncid_, host_rank_id, host_rank);
+    check_err(stat, __LINE__, __FILE__);
+  }
   stat = nc_close(ncid_);
   check_err(stat, __LINE__, __FILE__);
 }
 
 void FieldExporter::open() {
+  int stat;
 #ifdef _MSC_VER
-  auto stat = nc_open(filename_, NC_WRITE, &ncid_);
+  stat = nc_open(filename_, NC_WRITE, &ncid_);
 #else
-#ifndef NP_PER_NODE
-  auto stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, MPI_COMM_WORLD,
+  if (tot_proc <= NP_PER_NODE) {
+  stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, MPI_COMM_WORLD,
+                     MPI_INFO_NULL, &ncid_);
+  } else {
+  stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, host_comm[my_host],
                           MPI_INFO_NULL, &ncid_);
-#else
-  auto stat = nc_open_par(filename_, NC_WRITE | NC_MPIIO, host_comm[my_host],
-                          MPI_INFO_NULL, &ncid_);
-#endif
+  }
 #endif
   check_err(stat, __LINE__, __FILE__);
 }
@@ -321,20 +330,20 @@ void FieldExporter::set_coarse_grain_box(const Vec_2<int>& gl_cells_size,
   if (my_cells_size.x % cg_box_len_ == 0 &&
       my_cells_size.y % cg_box_len_ == 0) {
     n_host_.x = n_host_.y = 1;
-#ifdef NP_PER_NODE
-    if (domain_sizes.x <= NP_PER_NODE && NP_PER_NODE % domain_sizes.x == 0) {
-        n_host_.x = 1;
-    } else if (domain_sizes.x > NP_PER_NODE && domain_sizes.x % NP_PER_NODE == 0) {
-        n_host_.x = domain_sizes.x / NP_PER_NODE;   
-    } else {
-      if (my_proc == 0) {
-        std::cerr << "NP_PER_NODE = " << NP_PER_NODE
-                  << "domain_sizes.x = " << domain_sizes.x << std::endl;
+    if (tot_proc > NP_PER_NODE) {
+      if (domain_sizes.x <= NP_PER_NODE && NP_PER_NODE % domain_sizes.x == 0) {
+          n_host_.x = 1;
+      } else if (domain_sizes.x > NP_PER_NODE && domain_sizes.x % NP_PER_NODE == 0) {
+          n_host_.x = domain_sizes.x / NP_PER_NODE;   
+      } else {
+        if (my_proc == 0) {
+          std::cerr << "NP_PER_NODE = " << NP_PER_NODE
+                    << "domain_sizes.x = " << domain_sizes.x << std::endl;
+        }
+        MPI_Abort(MPI_COMM_WORLD, -1);
       }
-      MPI_Abort(MPI_COMM_WORLD, -1);
+      n_host_.y = tot_host / n_host_.x;
     }
-    n_host_.y = tot_host / n_host_.x;
-#endif
     gl_field_len_[1] = gl_cells_size.x / cg_box_len_ / n_host_.x;
     gl_field_len_[0] = gl_cells_size.y / cg_box_len_ / n_host_.y;
 

@@ -5,9 +5,10 @@ Domain_2::Domain_2(const Vec2d & gl_l)
   : l_(gl_l), gl_l_(gl_l), gl_half_l_(gl_l * 0.5) {}
 
 Domain_2::Domain_2(const Vec2d& gl_l, const Vec2i& gl_size,
-  const Vec2i& gl_cells_size, Vec2i& cells_size,
-  Vec2d& origin, Vec2b &flag_c)
-  : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5), gl_size_(gl_size),
+                   const Vec2i& gl_cells_size, Vec2i& cells_size,
+                   Vec2d& origin, Vec2b &flag_c)
+                   : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5),
+                     gl_size_(gl_size),
   gl_cells_size_(gl_cells_size), cells_size_(cells_size) {
   find_neighbor(rank_, flag_comm_, neighbor);
   flag_c = flag_comm_;
@@ -123,6 +124,10 @@ void Domain_2::tangle(Vec_2<double>& pos) const {
 Vec_2<int> Domain_2::partition(const Vec2d& l, int n_proc) {
   if (n_proc == 1) {
     return Vec_2<int>(1, 1);
+  } else if (l.x / l.y >= n_proc){
+    return Vec_2<int>(n_proc, 1);
+  } else if (l.y / l.x >= n_proc){
+    return Vec_2<int>(1, n_proc);
   } else {
     int nx = std::sqrt(n_proc);
     while (n_proc % nx != 0) {

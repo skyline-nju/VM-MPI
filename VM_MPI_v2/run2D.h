@@ -68,9 +68,9 @@ void cal_force(std::vector<TNode> &p_arr,
   auto f1 = [](TNode *pi, TNode *pj) {
     pi->interact(*pj);
   };
-  auto f2 = [&dm](TNode *pi, TNode *pj) {
-    pi->interact(*pj, dm);
-  };
+  // auto f2 = [&dm](TNode *pi, TNode *pj) {
+  //   pi->interact(*pj, dm);
+  // };
   auto f3 = [](TNode *pi, TNode *pj, const Vec_2<double> &offset) {
     pi->interact(*pj, offset);
   };
@@ -165,3 +165,7 @@ void run_rand_torque(int gl_par_num, const Vec_2<double> &gl_l, double eta,
 void run_osc_field(int gl_par_num, const Vec_2<double> &gl_l, double eta,
                    double h0, int t_half, int n_period, unsigned long long seed,
                    double r_cut, double v0);
+
+void run_density_noise(int gl_par_num, const Vec_2<double> &gl_l, double eta,
+                       double eps, int n_step, unsigned long long seed,
+                       double r_cut, double v0);

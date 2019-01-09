@@ -15,19 +15,19 @@ public:
   typedef Vec_2<double> Vec2d;
 
   CellListBase_2(const Vec2d &l,
-    double r_cut,
-    const Vec2d &gl_l,
-    const Vec2d &origin,
-    const Vec_2<bool> &flag_ext);
+                 double r_cut,
+                 const Vec2d &gl_l,
+                 const Vec2d &origin,
+                 const Vec_2<bool> &flag_ext);
 
   CellListBase_2(const Vec_2<int> &cell_size,
-    const Vec2d &lc,
-    const Vec2d &gl_l,
-    const Vec2d &origin,
-    const Vec_2<bool> &flag_ext);
+                 const Vec2d &lc,
+                 const Vec2d &gl_l,
+                 const Vec2d &origin,
+                 const Vec_2<bool> &flag_ext);
 
   static void partition(const Vec_2<double> &l, double r_cut,
-    Vec_2<int> &cells_size, Vec_2<double> &cell_len);
+                        Vec_2<int> &cells_size, Vec_2<double> &cell_len);
 
   int get_nx(double x) const {
     return int((x - origin_.x) * inverse_lc_.x);
@@ -40,7 +40,6 @@ public:
   int get_ic(const TPar &p) const {
     return get_nx(p.pos.x) + get_ny(p.pos.y) * n_.x;
   }
-
 
   int ncells() const { return ncells_; }
   const Vec2d& origin() const { return origin_; }
@@ -209,7 +208,8 @@ void CellListNode_2<TNode>::for_each_pair(BiFunc1 f1, BiFunc2 f2, const Vec2i& i
 template <typename TNode>
 template <typename BiFunc, typename TriFunc>
 void CellListNode_2<TNode>::for_each_pair_fast(BiFunc f1, TriFunc f2,
-  const Vec2i& ic_beg, const Vec2i& ic_end) const {
+                                               const Vec2i& ic_beg,
+                                               const Vec2i& ic_end) const {
   int y[2];
   int x[2];
   int i[8];
@@ -387,7 +387,9 @@ int CellListNode_2<TNode>::get_par_num() const {
 }
 
 template <typename TNode>
-void CellListNode_2<TNode>::reserve_particles(std::vector<TNode>& p_arr, int new_size, double magnification) {
+void CellListNode_2<TNode>::reserve_particles(std::vector<TNode>& p_arr,
+                                              int new_size,
+                                              double magnification) {
   size_t new_cap = new_size * magnification;
   std::cout << "old capacity = " << p_arr.capacity() << "\t";
   p_arr.reserve(new_cap);
