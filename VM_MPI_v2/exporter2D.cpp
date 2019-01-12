@@ -24,8 +24,56 @@ MPI_Group *host_group = nullptr;
 MPI_Comm *host_comm = nullptr;
 #endif
 
+void create_output_folder() {
+  folder = "data" + delimiter;
+  if (my_proc == 0) {
+    mkdir(folder);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void set_base_name() {
+  char str[100];
+#ifdef DISORDER_ON
+  if (gl_l.x == gl_l.y) {
+    snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
+  } else {
+    snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
+  }
+#else
+  if (gl_l.x == gl_l.y) {
+    snprintf(str, 100, "%g_%.2f_%.1f_%llu", gl_l.x, eta, rho0, seed);
+  } else {
+    snprintf(str, 100, "%g_%g_%.2f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho0, seed);
+  }
+#endif
+  base_name = str;
+}
+
+void set_mult_nodes() {
+  if (tot_proc > NP_PER_NODE) {
+    tot_host = tot_proc / NP_PER_NODE;
+    host_group = new MPI_Group[tot_host];
+    host_comm = new MPI_Comm[tot_host];
+    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
+    for (int i = 0; i < tot_host; i++) {
+      int *rank_arr = new int[NP_PER_NODE];
+      for (int j = 0; j < NP_PER_NODE; j++) {
+        rank_arr[j] = j + i * NP_PER_NODE;
+      }
+      MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
+      delete[] rank_arr;
+    }
+
+    for (int i = 0; i < tot_host; i++) {
+      MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
+    }
+    my_host = my_proc / NP_PER_NODE;
+  }
+}
+
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
-  const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0) {
+                const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0) {
   gl_n_par = gl_np;
   eta = eta0;
   eps = eps0;
@@ -36,84 +84,10 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
   rho0 = gl_np / (gl_l.x * gl_l.y);
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
-  folder = "data" + delimiter;
-  if (my_proc == 0) {
-    mkdir(folder);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-  char str[100];
-  if (gl_l.x == gl_l.y) {
-    snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
-  } else {
-    snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
-  }
-  base_name = str;
-  if (tot_proc > NP_PER_NODE) {
-    tot_host = tot_proc / NP_PER_NODE;
-    host_group = new MPI_Group[tot_host];
-    host_comm = new MPI_Comm[tot_host];
-    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
-    for (int i = 0; i < tot_host; i++) {
-      int *rank_arr = new int[NP_PER_NODE];
-      for (int j = 0; j < NP_PER_NODE; j++) {
-        rank_arr[j] = j + i * NP_PER_NODE;
-      }
-      MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
-      delete[] rank_arr;
-    }
 
-    for (int i = 0; i < tot_host; i++) {
-      MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
-    }
-    my_host = my_proc / NP_PER_NODE;
-  }
-
-}
-
-void ini_output(int gl_np, double eta0, double h0,
-                int half_t, int t_equil, int steps, unsigned long long sd,
-                const Vec_2<double>& gl_l0, const Vec_2<int>& domain_sizes0) {
-  gl_n_par = gl_np;
-  eta = eta0;
-  H0 = h0;
-  t_half = half_t;
-  t_eq = t_equil;
-  n_step = steps;
-  seed = sd;
-  gl_l = gl_l0;
-  domain_sizes = domain_sizes0;
-  rho0 = gl_np / (gl_l.x * gl_l.y);
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
-  folder = "data" + delimiter;
-  if (my_proc == 0) {
-    mkdir(folder);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-  char str[100];
-  snprintf(str, 100, "%g_%.2f_%.2f_%.1f_%d_%d_%llu",
-           gl_l.x, eta, H0, rho0, t_half, t_eq, seed);
-  base_name = str;
-
-  if (tot_proc > NP_PER_NODE) {
-    tot_host = tot_proc / NP_PER_NODE;
-    host_group = new MPI_Group[tot_host];
-    host_comm = new MPI_Comm[tot_host];
-    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
-    for (int i = 0; i < tot_host; i++) {
-      int *rank_arr = new int[NP_PER_NODE];
-      for (int j = 0; j < NP_PER_NODE; j++) {
-        rank_arr[j] = j + i * NP_PER_NODE;
-      }
-      MPI_Group_incl(gl_group, NP_PER_NODE, rank_arr, &host_group[i]);
-      delete[] rank_arr;
-    }
-
-    for (int i = 0; i < tot_host; i++) {
-      MPI_Comm_create(MPI_COMM_WORLD, host_group[i], &host_comm[i]);
-    }
-    my_host = my_proc / NP_PER_NODE;
-  }
+  create_output_folder();
+  set_base_name();
+  set_mult_nodes();
 }
 
 void output_finalize() {
@@ -166,10 +140,28 @@ LogExporter::LogExporter(int interval)
   fout_ << "\nblock sizes=" << domain_sizes;
   fout_ << "\nn_step=" << n_step;
   fout_ << "\nseed=" << seed;
-#ifdef COUNT_NEIGHBOR
+
+#ifdef SCALAR_NOISE
   fout_ << "\nscalar noise";
 #else
   fout_ << "\nvectorial noise";
+#endif
+  fout_ << " = " << eta;
+
+#ifdef DISORDER_ON
+#ifdef RANDOM_TORQUE
+  fout_ << "random torque";
+#elif RANDOM_FIELD
+  fout_ << "random filed";
+#else
+  fout_ << "random stress";
+#endif
+  fout_ << "  = " << eps;
+#endif
+#ifdef POLAR_ALIGNE
+  fout_ << "\npolar alignment";
+#else
+  fout_ << "\nnematic alignment";
 #endif
   fout_ << "\n\n-------- RUN --------";
   fout_ << "\ntime step\telapsed time" << std::endl;
@@ -254,7 +246,7 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
 
   /* assign global attributes */
   if (t_half > 0) {
-    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d with external field");
+    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d");
     check_err(stat, __LINE__, __FILE__);
     stat = nc_put_att_int(ncid_, NC_GLOBAL, "t_half", NC_INT, 1, &t_half);
     check_err(stat, __LINE__, __FILE__);
@@ -263,15 +255,34 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
     stat = nc_put_att_double(ncid_, NC_GLOBAL, "h0", NC_DOUBLE, 1, &H0);
     check_err(stat, __LINE__, __FILE__);
   } else {
-    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d with random torques");
+    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d");
     check_err(stat, __LINE__, __FILE__);
     stat = nc_put_att_double(ncid_, NC_GLOBAL, "epsilon", NC_DOUBLE, 1, &eps);
     check_err(stat, __LINE__, __FILE__);
   }
-#ifdef COUNT_NEIGHBOR
+#ifdef SCALAR_NOISE
   stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 5, "scalar");
 #else
   stat = nc_put_att_text(ncid_, NC_GLOBAL, "noise", 9, "vectorial");
+#endif
+  check_err(stat, __LINE__, __FILE__);
+#ifdef POLAR_ALIGN
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "alignment", 5, "polar");
+#else
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "alignment", 7, "nematic");
+#endif
+  check_err(stat, __LINE__, __FILE__);
+
+
+#ifdef RANDOM_TORQUE
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "disorder", 2, "RT");
+  check_err(stat, __LINE__, __FILE__);
+#elif RANDOM_FIELD
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "disorder", 2, "RF");
+  check_err(stat, __LINE__, __FILE__);
+#elif RANDOM_STRESS
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "disorder", 2, "RS");
+  check_err(stat, __LINE__, __FILE__);
 #endif
   check_err(stat, __LINE__, __FILE__);
   stat = nc_put_att_double(ncid_, NC_GLOBAL, "eta", NC_DOUBLE, 1, &eta);

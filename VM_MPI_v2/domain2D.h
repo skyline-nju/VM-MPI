@@ -77,3 +77,4 @@ Domain_2::Domain_2(const Vec2d& gl_l, CellListNode_2<TNode>** cl, double r_cut)
   set_comm_block(cells_size_, flag_comm_, inner_shell, outer_shell);
   *cl = new CellListNode_2<TNode>(cells_size_, cell_len, gl_l_, origin_, flag_comm_);
 }
+

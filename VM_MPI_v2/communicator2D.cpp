@@ -1,5 +1,4 @@
 #include "communicator2D.h"
-#define TEST 2
 
 void find_shell(const Vec_2<int>& n, const Vec_2<int>& thickness, Vec_2<block_t> shell[2]) {
   for (int ori = 0; ori < 2; ori++) {
@@ -39,28 +38,4 @@ void set_comm_block(const Vec_2<int>& cells_size, const Vec_2<bool>& flag_comm,
 
   const Vec_2<int> extended_cells_size = cells_size + thickness * 2;
   find_shell(extended_cells_size, thickness, outer_shell);
-
-#if TEST == 2
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  if (my_rank == 0) {
-    std::cout << "proc = " << my_rank << std::endl;
-    std::cout << "n: " << cells_size << std::endl;
-    std::cout << "thickness: " << thickness << std::endl;
-
-    std::cout << "outer shell" << std::endl;
-    for (int i = 0; i < 2; i++) {
-      for (int dim = 0; dim < 2; dim++) {
-        std::cout << outer_shell[i][dim].beg << ";\t" << outer_shell[i][dim].end << "\n";
-      }
-    }
-    std::cout << "inner shell" << std::endl;
-    for (int i = 0; i < 2; i++) {
-      for (int dim = 0; dim < 2; dim++)
-        std::cout << inner_shell[i][dim].beg << ";\t" << inner_shell[i][dim].end << "\n";
-    }
-    std::cout << std::endl;
-    std::cout << "----------" << std::endl;
-  }
-#endif
 }

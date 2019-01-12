@@ -12,10 +12,6 @@
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
                 const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
 
-void ini_output(int gl_np, double eta0, double h0,
-                int half_t, int t_equil, int steps, unsigned long long sd,
-                const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
-
 void output_finalize();
 
 // check whether there is error when outputting netcdf file
@@ -29,8 +25,13 @@ void get_mean_vel(double *vel_mean, const std::vector<TPar> p_arr,
   vel_mean[0] = vel_mean[1] = 0;
   auto end = p_arr.cend();
   for (auto it = p_arr.cbegin(); it != end; ++it) {
+#ifdef POLAR_ALIGN
     vel_mean[0] += (*it).ori.x;
     vel_mean[1] += (*it).ori.y;
+#else
+    vel_mean[0] += (*it).ori.x * (*it).ori.x - (*it).ori.y * (*it).ori.y;
+    vel_mean[1] += 2 * (*it).ori.x * (*it).ori.y;
+#endif
   }
   double gl_vel_sum[2];
   MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -131,8 +132,13 @@ void FieldExporter::coarse_grain(const std::vector<TPar>& p_arr,
     int iy = int(((*it).pos.y - origin_.y) / cg_box_len_);
     int idx = ix + iy * nx;
     den_fields[idx] += 1;
+#ifdef POLAR_ALIGN
     vel_fields[idx] += (*it).ori.x;
     vel_fields[idx + nx_ny] += (*it).ori.y;
+#else
+    vel_fields[idx] += (*it).ori.x * (*it).ori.x - (*it).ori.y * (*it).ori.y;
+    vel_fields[idx + nx_ny] += 2 * (*it).ori.x * (*it).ori.y;
+#endif
   }
 }
 

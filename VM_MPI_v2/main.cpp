@@ -23,10 +23,12 @@ int main(int argc, char* argv[]) {
   double rho0 = 1;
   unsigned long long seed = 1;
   Ranq1 myran(seed + my_rank);
-  int n_step = 3000000;
+  int n_step = atoi(argv[4]);
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
+  int n_save_snap = 5000;
+  int block_size = 2;
 
-  run_density_noise(gl_par_num, gl_l, eta, eps, n_step, seed, r_cut, v0);
+  run(gl_par_num, gl_l, eta, eps, seed, n_step, n_save_snap, block_size);
 }

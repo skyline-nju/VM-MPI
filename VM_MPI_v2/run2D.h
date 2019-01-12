@@ -158,14 +158,13 @@ void run(std::vector<TNode> &p_arr, int gl_par_num, TInteract interact_all,
   }
 }
 
-void run_rand_torque(int gl_par_num, const Vec_2<double> &gl_l, double eta,
-                     double eps, int n_step, unsigned long long seed,
-                     double r_cut, double v0);
+void run(int gl_par_num, const Vec_2<double> &gl_l,
+         double eta, double eps, unsigned long long seed,
+         int n_step, int n_save_snap, int block_size,
+         double r_cut=1., double v0=0.5);
 
-void run_osc_field(int gl_par_num, const Vec_2<double> &gl_l, double eta,
-                   double h0, int t_half, int n_period, unsigned long long seed,
-                   double r_cut, double v0);
-
+#ifdef DENSITY_NOISE
 void run_density_noise(int gl_par_num, const Vec_2<double> &gl_l, double eta,
                        double eps, int n_step, unsigned long long seed,
                        double r_cut, double v0);
+#endif
