@@ -8,6 +8,7 @@
 #include "netcdf_par.h"
 #endif
 #include "mpi.h"
+#include "cellList2D.h"
 
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
                 const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
@@ -20,19 +21,24 @@ void check_err(const int stat, const int line, const char * file);
 int get_start_particle_num(int particle_num);
 
 template <typename TPar>
-void get_mean_vel(double *vel_mean, const std::vector<TPar> p_arr,
-                  int gl_np, bool flag_broadcast) {
-  vel_mean[0] = vel_mean[1] = 0;
+void get_vel_sum(double *vel_sum, const std::vector<TPar> &p_arr) {
+  vel_sum[0] = vel_sum[1] = 0.;
   auto end = p_arr.cend();
-  for (auto it = p_arr.cbegin(); it != end; ++it) {
+  for (auto it = p_arr.cbegin(); it!=end; ++it) {
 #ifdef POLAR_ALIGN
-    vel_mean[0] += (*it).ori.x;
-    vel_mean[1] += (*it).ori.y;
+    vel_sum[0] += (*it).ori.x;
+    vel_sum[1] += (*it).ori.y;
 #else
-    vel_mean[0] += (*it).ori.x * (*it).ori.x - (*it).ori.y * (*it).ori.y;
-    vel_mean[1] += 2 * (*it).ori.x * (*it).ori.y;
+    vel_sum[0] += (*it).ori.x * (*it).ori.x - (*it).ori.y * (*it).ori.y;
+    vel_sum[1] += 2 * (*it).ori.x * (*it).ori.y;
 #endif
   }
+}
+
+template <typename TPar>
+void get_mean_vel(double *vel_mean, const std::vector<TPar> &p_arr,
+                  int gl_np, bool flag_broadcast) {
+  get_vel_sum(vel_mean, p_arr);
   double gl_vel_sum[2];
   MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   int my_rank;
@@ -59,6 +65,10 @@ public:
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar> &p_arr);
+
+  template <typename TPar, typename T>
+  void dump(int i_step, const std::vector<TPar> &p_arr, CellListNode_2<TPar> &cl,
+            const std::vector<T> &n_arr);
 private:
   std::ofstream fout_;
   int gl_np_;
@@ -76,9 +86,30 @@ void OrderParaExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   }
 }
 
+template <typename TPar, typename T>
+void OrderParaExporter::dump(int i_step, const std::vector<TPar>& p_arr,
+                             CellListNode_2<TPar>& cl, const std::vector<T>& n_arr) {
+  if (need_export(i_step)) {
+    Vec_2<double> gl_vm;
+    int np = cl.get_par_num(n_arr);
+    int gl_np;
+    MPI_Reduce(&np, &gl_np, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    get_mean_vel(&gl_vm.x, p_arr, gl_np, false);
+    if (my_proc_ == 0) {
+      fout_ << gl_vm.module() << "\t" << gl_vm.x << "\t" << gl_vm.y << "\t" << gl_np;
+      if (i_step % 5000 == 0) {
+        fout_ << std::endl;
+      } else {
+        fout_ << "\n";
+      }
+    }
+  }
+}
+
 class FieldExporter : public BaseExporter {
 public:
-  explicit FieldExporter(int frame_interval, int first_frame, int bin_len,
+  explicit FieldExporter(int frame_interval,
+                         int bin_len,
                          const Vec_2<int> &domain_rank,
                          const Vec_2<int> &gl_cells_size,
                          const Vec_2<int> &my_cells_size);
@@ -91,7 +122,7 @@ public:
   void coarse_grain(const std::vector<TPar> &p_arr, T1 *den_fields, T2 *vel_fields) const;
 
   template<typename TPar>
-  void dump(int i_step, const std::vector<TPar> &p_arr);
+  int dump(int i_step, const std::vector<TPar> &p_arr);
 
   void open();
 
@@ -119,6 +150,8 @@ private:
   size_t time_idx_[1];
 
   Vec_2<int> n_host_{};
+
+  int n_steps_per_frame_;
 };
 
 template <typename TPar, typename T1, typename T2>
@@ -143,8 +176,8 @@ void FieldExporter::coarse_grain(const std::vector<TPar>& p_arr,
 }
 
 template <typename TPar>
-void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
-  if (need_export(i_step)) {
+int FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
+  if (i_step % n_steps_per_frame_ == 0) {
     open();
     /* inquire varid */
     int stat = nc_inq_varid(ncid_, "time", &time_id_);
@@ -187,5 +220,7 @@ void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     delete[] vel_fields;
     stat = nc_close(ncid_);
     check_err(stat, __LINE__, __FILE__);
+    return 1;
   }
+  return 0;
 }

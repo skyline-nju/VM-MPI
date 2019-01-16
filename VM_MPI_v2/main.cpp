@@ -27,8 +27,12 @@ int main(int argc, char* argv[]) {
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
-  int n_save_snap = 5000;
-  int block_size = 2;
+  int snap_inteval = 5000;
+  int snap_block_size = 2;
+  int box_len_birth = 4;
 
-  run(gl_par_num, gl_l, eta, eps, seed, n_step, n_save_snap, block_size);
+  //run(gl_par_num, gl_l, eta, eps, seed, n_step, n_save_snap, block_size);
+
+  run_birth_death(gl_par_num, gl_l, eta, eps * 1e-8, seed, n_step,
+                  snap_inteval, snap_block_size, box_len_birth);
 }

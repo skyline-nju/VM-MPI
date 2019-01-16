@@ -16,6 +16,8 @@ unsigned long long seed;
 std::string folder;
 std::string base_name;
 
+int serials_number = 0;
+
 int my_host = 0;
 #ifdef NP_PER_NODE
 int tot_host;
@@ -41,11 +43,19 @@ void set_base_name() {
     snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
   }
 #else
+#ifdef BIRTH_DEATH
+  if (gl_l.x == gl_l.y) {
+    snprintf(str, 100, "%g_%.3f_%g_%.1f_%llu", gl_l.x, eta, eps * 1e8, rho0, seed);
+  } else {
+    snprintf(str, 100, "%g_%g_%.3f_%g_%.1f_%llu", gl_l.x, gl_l.y, eta, eps * 1e8, rho0, seed);
+  }
+#else
   if (gl_l.x == gl_l.y) {
     snprintf(str, 100, "%g_%.2f_%.1f_%llu", gl_l.x, eta, rho0, seed);
   } else {
     snprintf(str, 100, "%g_%g_%.2f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho0, seed);
   }
+#endif
 #endif
   base_name = str;
 }
@@ -182,15 +192,18 @@ OrderParaExporter::~OrderParaExporter() {
   }
 }
 
-FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
+FieldExporter::FieldExporter(int frame_interval, int bin_len,
                              const Vec_2<int>& domain_rank,
                              const Vec_2<int>& gl_cells_size,
                              const Vec_2<int>& my_cells_size)
                              : frame_len_(NC_UNLIMITED), cg_box_len_(bin_len) {
   time_idx_[0] = 0;
+  n_steps_per_frame_ = frame_interval;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc_);
-  set_lin_frame(frame_interval, n_step, first_frame);
-  snprintf(filename_, 100, "%sfield_%s_host%d.nc", folder.c_str(), base_name.c_str(), my_host);
+  //set_lin_frame(frame_interval, tot_steps, first_frame);
+  snprintf(filename_, 100, "%sfield_%s_host%d_%d.nc", folder.c_str(), base_name.c_str(),
+           my_host, serials_number);
+  serials_number++;
 
   int stat;
 #ifdef _MSC_VER
@@ -245,9 +258,9 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   }
 
   /* assign global attributes */
+  stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 18, "Vicsek model in 2d");
+  check_err(stat, __LINE__, __FILE__);
   if (t_half > 0) {
-    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d");
-    check_err(stat, __LINE__, __FILE__);
     stat = nc_put_att_int(ncid_, NC_GLOBAL, "t_half", NC_INT, 1, &t_half);
     check_err(stat, __LINE__, __FILE__);
     stat = nc_put_att_int(ncid_, NC_GLOBAL, "t_equil", NC_INT, 1, &t_eq);
@@ -255,9 +268,11 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
     stat = nc_put_att_double(ncid_, NC_GLOBAL, "h0", NC_DOUBLE, 1, &H0);
     check_err(stat, __LINE__, __FILE__);
   } else {
-    stat = nc_put_att_text(ncid_, NC_GLOBAL, "title", 38, "Vicsek model in 2d");
-    check_err(stat, __LINE__, __FILE__);
+#ifdef DISORDER_ON
     stat = nc_put_att_double(ncid_, NC_GLOBAL, "epsilon", NC_DOUBLE, 1, &eps);
+#elif BIRTH_DEATH
+    stat = nc_put_att_double(ncid_, NC_GLOBAL, "birth_rate", NC_DOUBLE, 1, &eps);
+#endif
     check_err(stat, __LINE__, __FILE__);
   }
 #ifdef SCALAR_NOISE
@@ -297,7 +312,7 @@ FieldExporter::FieldExporter(int frame_interval, int first_frame, int bin_len,
   check_err(stat, __LINE__, __FILE__);
 
   /* assign per-variable attributes */
-  stat = nc_put_att_int(ncid_, time_id_, "frame_inteval", NC_INT, 1, &frame_interval_);
+  stat = nc_put_att_int(ncid_, time_id_, "frame_inteval", NC_INT, 1, &frame_interval);
   check_err(stat, __LINE__, __FILE__);
   stat = nc_put_att_int(ncid_, densities_id_, "box_len", NC_INT, 1, &bin_len);
   check_err(stat, __LINE__, __FILE__);

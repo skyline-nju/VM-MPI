@@ -14,6 +14,8 @@ public:
   VicsekPar_2(const double* buf)
     : pos(buf[0], buf[1]), ori(buf[2], buf[3]), ori_next(ori) {}
 
+  void update(const Vec_2<double> &pos_new, const Vec_2<double> &ori_new);
+
   template<typename TRan>
   VicsekPar_2(TRan &myran, const Vec_2<double> &l, const Vec_2<double> &origin);
 
@@ -139,9 +141,11 @@ template <class TRan>
 void VicsekPar_2::move(double eta, double v0, TRan& myran,
                        const Domain_2& domain, const Disorder_2& disorder) {
 #ifdef SCALAR_NOISE
+#ifdef DISORDER_ON
 #ifndef RANDOM_TORQUE
   ori_next /= (n_neighbor + 1.0);
   disorder.eval(pos, ori_next);
+#endif
 #endif
   ori_next.normalize();
   const double c1 = ori_next.x;
@@ -200,6 +204,12 @@ void VicsekPar_2::move_density_noise(double eta, double v0, double eps, TRan &my
   domain.tangle(pos);
 }
 #endif
+
+inline void VicsekPar_2::update(const Vec_2<double>& pos_new,
+                                const Vec_2<double>& ori_new) {
+  pos = pos_new;
+  ori = ori_next = ori_new;
+}
 
 inline void VicsekPar_2::copy(double *dest, int &idx) const {
   dest[idx] = pos.x;

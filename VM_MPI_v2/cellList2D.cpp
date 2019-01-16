@@ -26,6 +26,12 @@ CellListBase_2::CellListBase_2(const Vec2d & l,
     }
   }
   ncells_ = n_.x * n_.y;
+  if (flag_ext_.x) {
+    pad_left_ = pad_right_ = 1;
+  }
+  if (flag_ext_.y) {
+    pad_top_ = pad_bottom_ = 1;
+  }
 }
 
 CellListBase_2::CellListBase_2(const Vec_2<int> &cell_size,
@@ -44,13 +50,19 @@ CellListBase_2::CellListBase_2(const Vec_2<int> &cell_size,
     }
   }
   ncells_ = n_.x * n_.y;
+  if (flag_ext_.x) {
+    pad_left_ = pad_right_ = 1;
+  }
+  if (flag_ext_.y) {
+    pad_top_ = pad_bottom_ = 1;
+  }
 }
 
 void CellListBase_2::partition(const Vec_2<double>& l, double r_cut,
                                Vec_2<int>& cells_size,
                                Vec_2<double>& cell_len) {
   for (int dim = 0; dim < 2; dim++) {
-    cells_size[dim] = l[dim] / r_cut;
+    cells_size[dim] = int(l[dim] / r_cut);
     cell_len[dim] = l[dim] / cells_size[dim];
   }
 }

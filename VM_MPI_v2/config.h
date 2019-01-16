@@ -13,7 +13,7 @@
 #define COUNT_NEIGHBOR
 #endif
 
-#define DISORDER_ON
+//#define DISORDER_ON
 #ifdef DISORDER_ON
 //#define RANDOM_TORQUE 1
 //#define RANDOM_FIELD 2
@@ -28,3 +28,5 @@
 #ifdef DENSITY_NOISE
 #define COUNT_NEIGHBOR
 #endif
+
+#define BIRTH_DEATH 1
