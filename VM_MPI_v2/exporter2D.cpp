@@ -60,7 +60,7 @@ void set_base_name() {
   base_name = str;
 }
 
-void set_mult_nodes() {
+void set_multi_nodes() {
   if (tot_proc > NP_PER_NODE) {
     tot_host = tot_proc / NP_PER_NODE;
     host_group = new MPI_Group[tot_host];
@@ -97,7 +97,7 @@ void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long lo
 
   create_output_folder();
   set_base_name();
-  set_mult_nodes();
+  set_multi_nodes();
 }
 
 void output_finalize() {

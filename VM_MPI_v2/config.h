@@ -1,7 +1,7 @@
 #pragma once
 #define USE_MPI
 
-//#define POLAR_ALIGN
+#define POLAR_ALIGN
 
 #define OUTPUT_ON
 #ifdef OUTPUT_ON
@@ -29,4 +29,4 @@
 #define COUNT_NEIGHBOR
 #endif
 
-#define BIRTH_DEATH 1
+//#define BIRTH_DEATH 1

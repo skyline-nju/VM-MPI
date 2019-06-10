@@ -26,7 +26,7 @@ public:
   void interact(const Vec_2<double> &dR, Par &p);
 
   template <class Par>
-  void interact(Par &p, const Vec_2<double> &offset);
+  void interact(Par &p, const Vec_2<double> &offset) { interact(p.pos - pos + offset, p); }
 
   template <class Par>
   void interact(Par &p, const Domain_2 &domain);
@@ -70,11 +70,12 @@ void VicsekPar_2::interact(Par& p) {
 
 template <class Par>
 void VicsekPar_2::interact(const Vec_2<double> &dR, Par &p) {
-  if (dR.square() < 1) {
+  if (dR.square() < 1.) {
 #ifdef POLAR_ALIGN
     ori_next += p.ori;
     p.ori_next += ori;
 #else
+// nematic aligning
     if (ori.dot(p.ori) > 0) {
       ori_next += p.ori;
       p.ori_next += ori;
@@ -88,11 +89,6 @@ void VicsekPar_2::interact(const Vec_2<double> &dR, Par &p) {
     p.n_neighbor += 1;
 #endif
   }
-}
-
-template <class Par>
-void VicsekPar_2::interact(Par& p, const Vec_2<double>& offset) {
-  interact(p.pos - pos + offset, p);
 }
 
 template <class Par>
@@ -170,7 +166,9 @@ void VicsekPar_2::move(double eta, double v0, TRan& myran,
   disorder.eval(pos, ori_next);
 #endif
 #endif
+#ifdef COUNT_NEIGHBOR
   n_neighbor = 0;
+#endif
   ori = ori_next;
   pos += v0 * ori;
   domain.tangle(pos);

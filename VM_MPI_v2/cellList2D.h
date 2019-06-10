@@ -12,6 +12,31 @@
 #include "node.h"
 #include "comn.h"
 
+/**
+ * @brief Get a vector that offsets the periodic boundary condition
+ *
+ * This function works well, however, CellListBase_2::get_offset fails to give
+ * expected results, for unknown reasons.
+ *
+ * @tparam TCellList     Template for cell list
+ * @param pos            Position of a particle
+ * @param cl             Cell list
+ * @return Vec_2<double>
+ */
+template <typename TCellList>
+Vec_2<double> get_offset(const Vec_2<double> &pos, const TCellList &cl) {
+  Vec_2<double> offset{};
+  Vec_2<double> dR = pos - cl.origin();
+  for (int dim = 0; dim < 2; dim++) {
+    if (dR[dim] < 0) {
+      offset[dim] = cl.gl_l()[dim];
+    } else if (dR[dim] > cl.l()[dim]) {
+      offset[dim] = -cl.gl_l()[dim];
+    }
+  }
+  return offset;
+}
+
 class CellListBase_2 {
 public:
   typedef Vec_2<double> Vec2d;
@@ -31,19 +56,12 @@ public:
   static void partition(const Vec_2<double> &l, double r_cut,
                         Vec_2<int> &cells_size, Vec_2<double> &cell_len);
 
-  int get_nx(double x) const {
-    return int((x - origin_.x) * inverse_lc_.x);
-  }
-  int get_ny(double y) const {
-    return int((y - origin_.y) * inverse_lc_.y);
-  }
-
+  int get_nx(double x) const { return int((x - origin_.x) * lc_recip_.x); }
+  int get_ny(double y) const { return int((y - origin_.y) * lc_recip_.y); }
   template <typename TPar>
-  int get_ic(const TPar &p) const {
-    return get_nx(p.pos.x) + get_ny(p.pos.y) * n_.x;
-  }
+  int get_ic(const TPar &p) const { return get_nx(p.pos.x) + get_ny(p.pos.y) * n_.x; }
 
-  int ncells() const { return ncells_; }
+  int n_cells() const { return n_cells_; }
   const Vec2d& origin() const { return origin_; }
   const Vec2d& l() const { return l_; }
   const Vec2d& gl_l() const { return gl_l_; }
@@ -51,19 +69,20 @@ public:
   const Vec_2<int>& cells_size() const { return n_; }
 
   Vec_2<double> get_offset(const Vec2d &pos) const;
+
+  void set_padding();
+
 protected:
-  int ncells_;
+  int n_cells_;
   Vec_2<int> n_;
   Vec_2<double> origin_;
-  Vec_2<double> inverse_lc_;
+  Vec_2<double> lc_recip_;  //  the reciprocal of length of each cell
   Vec_2<double> l_;
   Vec_2<double> gl_l_;
   Vec_2<bool> flag_ext_;
 
-  int pad_left_=0;
-  int pad_bottom_=0;
-  int pad_right_=0;
-  int pad_top_=0;
+  Vec_2<int> real_cell_beg_{};
+  Vec_2<int> real_cell_end_{};
 
   const static int cell_offset[4][2];
 };
@@ -79,7 +98,7 @@ public:
                  const Vec2d &gl_l,
                  const Vec2d &origin = Vec2d(),
                  const Vec_2<bool> &flag_ext = Vec_2<bool>())
-    : CellListBase_2(l, r_cut, gl_l, origin, flag_ext), head_(ncells_) {
+    : CellListBase_2(l, r_cut, gl_l, origin, flag_ext), head_(n_cells_) {
   }
 
   CellListNode_2(const Vec_2<int> &cell_size,
@@ -87,24 +106,24 @@ public:
                  const Vec2d &gl_l,
                  const Vec2d &origin = Vec2d(),
                  const Vec_2<bool> &flag_ext = Vec_2<bool>())
-    : CellListBase_2(cell_size, lc, gl_l, origin, flag_ext), head_(ncells_) {
+    : CellListBase_2(cell_size, lc, gl_l, origin, flag_ext), head_(n_cells_) {
   }
 
 
   template <typename BiFunc1, typename BiFunc2>
   void for_each_pair(BiFunc1 f1, BiFunc2 f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
   template <typename BiFunc1, typename BiFunc2>
-  void for_each_pair(BiFunc1 f1, BiFunc2 f2) const;
+  void for_each_pair(BiFunc1 f1, BiFunc2 f2) const { for_each_pair(f1, f2, Vec_2<int>(), real_cell_end_); }
 
   template <typename BiFunc, typename TriFunc>
   void for_each_pair_fast(BiFunc f1, TriFunc f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
   template <typename BiFunc, typename TriFunc>
-  void for_each_pair_fast(BiFunc f1, TriFunc f2) const;
+  void for_each_pair_fast(BiFunc f1, TriFunc f2) const { for_each_pair_fast(f1, f2, Vec_2<int>(), real_cell_end_); }
 
-  template <typename BiFunc>
-  void for_each_pair_slow(BiFunc f_ij, const Vec2i &ic_beg, const Vec2i &ic_end) const;
-  template <typename BiFunc>
-  void for_each_pair_slow(BiFunc f_ij) const;
+  template <typename BiFunc1, typename BiFunc2>
+  void for_each_pair_slow(BiFunc1 f1, BiFunc2 f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
+  template <typename BiFunc1, typename BiFunc2>
+  void for_each_pair_slow(BiFunc1 f1, BiFunc2 f2) const;
 
   template <typename UniFunc>
   void for_each_cell(UniFunc f, const Vec2i &beg, const Vec2i &end);
@@ -123,8 +142,9 @@ public:
 
   void clear(const Vec2i &first, const Vec2i &last);
 
-  template <typename TPar>
-  void replace(BiNode<TPar> &p_new, const BiNode<TPar> &p_old);
+  void replace(TNode &p1, const TNode &p2);
+
+  void make_compact(std::vector<TNode>& p_arr, std::vector<int>& vacancy);
 
   int get_par_num(const Vec2i &beg, const Vec2i &end) const;
   int get_par_num() const;
@@ -132,8 +152,6 @@ public:
   int get_par_num(const std::vector<T> &n_arr) const;
 
   void reserve_particles(std::vector<TNode> &p_arr, int new_size, double magnification = 1.1);
-
-  void make_compact(std::vector<TNode> &p_arr, std::vector<int> &vacancy);
 
   template <typename UniFunc, typename TRan, typename T1, typename T2>
   void birth_death(std::vector<TNode> &p_arr, UniFunc f_rate, TRan &myran,
@@ -153,15 +171,15 @@ protected:
 };
 
 template <typename TNode>
-template <typename BiFunc>
-void CellListNode_2<TNode>::for_each_pair_slow(BiFunc f_ij,
+template <typename BiFunc1, typename BiFunc2>
+void CellListNode_2<TNode>::for_each_pair_slow(BiFunc1 f1, BiFunc2 f2,
                                               const Vec2i& ic_beg,
                                               const Vec2i& ic_end) const {
   for (int y0 = ic_beg.y; y0 < ic_end.y; y0++) {
     for (int x0 = ic_beg.x; x0 < ic_end.x; x0++) {
       int i0 = x0 + y0 * n_.x;
       if (head_[i0]) {
-        for_each_node_pair(head_[i0], f_ij);
+        for_each_node_pair(head_[i0], f1);
         for (int j = 0; j < 4; j++) {
           int y1 = y0 + cell_offset[j][0];
           int x1 = x0 + cell_offset[j][1];
@@ -175,12 +193,28 @@ void CellListNode_2<TNode>::for_each_pair_slow(BiFunc f_ij,
           }
           int i1 = x1 + y1 * n_.x;
           if (head_[i1]) {
-            for_each_node_pair(head_[i0], head_[i1], f_ij);
+            for_each_node_pair(head_[i0], head_[i1], f2);
           }
         }
       }
     }
   }
+}
+
+template <typename TNode>
+template <typename BiFunc1, typename BiFunc2>
+void CellListNode_2<TNode>::for_each_pair_slow(BiFunc1 f1, BiFunc2 f2) const {
+  Vec_2<int> beg = real_cell_beg_;
+  Vec_2<int> end = n_;
+  if (flag_ext_.x) {
+    beg.x = 0;
+    end.x = n_.x;
+  }
+  if (flag_ext_.y) {
+    beg.y -= 1;
+    end.y -= 1;
+  }
+  for_each_pair_slow(f1, f2, beg, end);
 }
 
 template <typename TNode>
@@ -271,42 +305,6 @@ void CellListNode_2<TNode>::for_each_pair_fast(BiFunc f1, TriFunc f2,
   }
 }
 
-template <typename TNode>
-template <typename BiFunc1, typename BiFunc2>
-void CellListNode_2<TNode>::for_each_pair(BiFunc1 f1, BiFunc2 f2) const {
-  Vec_2<int> beg(0, 0);
-  Vec_2<int> end(n_);
-  if (flag_ext_.x)
-    end.x -= 1;
-  if (flag_ext_.y)
-    end.y -= 1;
-  for_each_pair(f1, f2, beg, end);
-}
-
-template <typename TNode>
-template <typename BiFunc, typename TriFunc>
-void CellListNode_2<TNode>::for_each_pair_fast(BiFunc f1, TriFunc f2) const {
-  Vec_2<int> end(n_);
-  if (flag_ext_.x)
-    end.x -= 1;
-  if (flag_ext_.y)
-    end.y -= 1;
-
-  for_each_pair_fast(f1, f2, Vec_2<int>(), end);
-}
-
-template <typename TNode>
-template <typename BiFunc>
-void CellListNode_2<TNode>::for_each_pair_slow(BiFunc f_ij) const {
-  Vec_2<int> end(n_);
-  if (flag_ext_.x)
-    end.x -= 1;
-  if (flag_ext_.y)
-    end.y -= 1;
-
-  for_each_pair_slow(f_ij, Vec_2<int>(), end);
-}
-
 template<typename TNode>
 void CellListNode_2<TNode>::create(std::vector<TNode>& p_arr) {
   auto end = p_arr.end();
@@ -317,7 +315,7 @@ void CellListNode_2<TNode>::create(std::vector<TNode>& p_arr) {
 
 template <typename TNode>
 void CellListNode_2<TNode>::recreate(std::vector<TNode>& p_arr) {
-  for (int ic = 0; ic < ncells_; ic++) {
+  for (int ic = 0; ic < n_cells_; ic++) {
     head_[ic] = nullptr;
   }
   create(p_arr);
@@ -339,7 +337,7 @@ template <typename T1, typename T2>
 void CellListNode_2<TNode>::recreate(std::vector<TNode>& p_arr,
                                      std::vector<T1>& num_arr,
                                      std::vector<Vec_2<T2>>& v_arr) {
-  for (int ic = 0; ic < ncells_; ic++) {
+  for (int ic = 0; ic < n_cells_; ic++) {
     head_[ic] = nullptr;
     num_arr[ic] = 0;
     v_arr[ic].x = v_arr[ic].y = 0;
@@ -388,19 +386,38 @@ void CellListNode_2<TNode>::clear(const Vec2i& first, const Vec2i& last) {
 }
 
 template <typename TNode>
-template <typename TPar>
-void CellListNode_2<TNode>::replace(BiNode<TPar>& p_new, const BiNode<TPar>& p_old) {
-  p_new = p_old;
-  if (p_new.next) {
-    p_new.next->prev = &p_new;
+void CellListNode_2<TNode>::replace(TNode& p1, const TNode& p2) {
+  p1 = p2;
+  if (p1.next) {
+    p1.next->prev = &p1;
   }
-  if (p_new.prev) {
-    p_new.prev->next = &p_new;
+  if (p1.prev) {
+    p1.prev->next = &p1;
   } else {
-    head_[get_ic(p_new)] = &p_new;
+    head_[get_ic(p1)] = &p1;
   }
 }
 
+
+template<typename TNode>
+void CellListNode_2<TNode>::make_compact(std::vector<TNode>& p_arr,
+                                         std::vector<int>& vacancy) {
+  //! sorted in descending order
+  std::sort(vacancy.begin(), vacancy.end(), std::greater<int>());
+  int k = 0;
+  while (k < vacancy.size()) {
+    if (p_arr.size() - 1 == vacancy[k]) {
+      p_arr.pop_back();
+      k++;
+    } else {
+      auto i = vacancy.back();
+      replace(p_arr[i], p_arr.back());
+      p_arr.pop_back();
+      vacancy.pop_back();
+    }
+  }
+  vacancy.clear();
+}
 
 template <typename TNode>
 int CellListNode_2<TNode>::get_par_num(const Vec2i& beg, const Vec2i& end) const {
@@ -428,8 +445,8 @@ template <typename TNode>
 template <typename T>
 int CellListNode_2<TNode>::get_par_num(const std::vector<T>& n_arr) const {
   int n_sum = 0;
-  for (int row = pad_bottom_; row < n_.y - pad_top_; row++) {
-    for (int col = pad_left_; col < n_.x - pad_right_; col++) {
+  for (int row = real_cell_beg_.y; row < real_cell_end_.y; row++) {
+    for (int col = real_cell_beg_.x; col < real_cell_end_.x; col++) {
       int ic = col + row * n_.x;
       n_sum += n_arr[ic];
     }
@@ -448,48 +465,7 @@ void CellListNode_2<TNode>::reserve_particles(std::vector<TNode>& p_arr,
   std::cout << "new capacity = " << new_cap << std::endl;
 }
 
-template <typename TNode>
-void CellListNode_2<TNode>::make_compact(std::vector<TNode>& p_arr,
-                                         std::vector<int>& vacancy) { //! in desending order
-  int k = 0;
-  while (k < vacancy.size()) {
-    if (p_arr.size() - 1 == vacancy[k]) {
-      p_arr.pop_back();
-      k++;
-    } else {
-      auto i = vacancy.back();
-      replace(p_arr[i], p_arr.back());
-      p_arr.pop_back();
-      vacancy.pop_back();
-    }
-  }
-  vacancy.clear();
-}
 
-/**
- * @brief Get a vector that offsets the periodic boundary condition
- *
- * This function works well, however, CellListBase_2::get_offset fails to give
- * expected results, for unknown reasons.
- *
- * @tparam TCellList     Temlate for cell list
- * @param pos            Positon of a particle
- * @param cl             Cell list
- * @return Vec_2<double>
- */
-template <typename TCellList>
-Vec_2<double> get_offset(const Vec_2<double> &pos, const TCellList &cl) {
-  Vec_2<double> offset{};
-  Vec_2<double> dR = pos - cl.origin();
-  for (int dim = 0; dim < 2; dim++) {
-    if (dR[dim] < 0) {
-      offset[dim] = cl.gl_l()[dim];
-    } else if (dR[dim] > cl.l()[dim]) {
-      offset[dim] = -cl.gl_l()[dim];
-    }
-  }
-  return offset;
-}
 
 template<typename TNode>
 template <typename UniFunc, typename TRan, typename T1, typename T2>
@@ -497,10 +473,9 @@ void CellListNode_2<TNode>::birth_death(std::vector<TNode> &p_arr, UniFunc f_rat
                                         std::vector<T1> &n_arr, std::vector<Vec_2<T2>> &v_arr) {
   std::vector<int> vacant_pos;
   vacant_pos.reserve(2048);
-  const TNode* p0 = &p_arr[0];
-  for (int row = pad_bottom_; row < n_.y - pad_top_; row++) {
+  for (int row = real_cell_beg_.y; row < real_cell_end_.y; row++) {
     const int row_nx = row * n_.x;
-    for (int col = pad_left_; col < n_.x - pad_right_; col++) {
+    for (int col = real_cell_beg_.x; col < real_cell_end_.x; col++) {
       const int ic = col + row_nx;
       const int my_n = n_arr[ic];
       double rate = f_rate(double(my_n));
@@ -528,7 +503,6 @@ void CellListNode_2<TNode>::birth_death(std::vector<TNode> &p_arr, UniFunc f_rat
       }
     }
   }
-  std::sort(vacant_pos.begin(), vacant_pos.end(), std::greater<int>());
   make_compact(p_arr, vacant_pos);
 }
 
@@ -537,8 +511,8 @@ template <typename UniFunc, typename TRan, typename T1, typename T2>
 void CellListNode_2<TNode>::birth_death(std::vector<TNode>& p_arr, UniFunc f_rate, TRan& myran,
                                         std::vector<T1>& n_arr, std::vector<Vec_2<T2>>& v_arr,
                                         const Vec_2<int>& cg_box_l) {
-  const int cg_nrows = (n_.y - pad_bottom_ - pad_top_) / cg_box_l.y;
-  const int cg_ncols = (n_.y - pad_left_ - pad_right_) / cg_box_l.x;
+  const int cg_nrows = (real_cell_end_.y - real_cell_beg_.y) / cg_box_l.y;
+  const int cg_ncols = (real_cell_end_.x - real_cell_beg_.x) / cg_box_l.x;
   const double area = cg_box_l.x * cg_box_l.y;
 
   std::vector<int> vacant_pos;
@@ -546,10 +520,10 @@ void CellListNode_2<TNode>::birth_death(std::vector<TNode>& p_arr, UniFunc f_rat
   std::vector<int> n_box(cg_box_l.x * cg_box_l.y);
 
   for (int cg_row = 0; cg_row < cg_nrows; cg_row++) {
-    const int fine_row_beg = cg_row * cg_box_l.y + pad_bottom_;
+    const int fine_row_beg = cg_row * cg_box_l.y + real_cell_beg_.y;
     const int fine_row_end = fine_row_beg + cg_box_l.y;
     for (int cg_col = 0; cg_col < cg_ncols; cg_col++) {
-      const int fine_col_beg = cg_col * cg_box_l.x + pad_left_;
+      const int fine_col_beg = cg_col * cg_box_l.x + real_cell_beg_.x;
       const int fine_col_end = fine_col_beg + cg_box_l.x;
       int cg_num = 0;
       Vec_2<double> cg_v{};
@@ -604,7 +578,6 @@ void CellListNode_2<TNode>::birth_death(std::vector<TNode>& p_arr, UniFunc f_rat
       }
     }
   }
-  std::sort(vacant_pos.begin(), vacant_pos.end(), std::greater<int>());
   make_compact(p_arr, vacant_pos);
 }
 
@@ -641,7 +614,7 @@ void CellListNode_2<TNode>::add_particle(std::vector<TNode>& p_arr, std::vector<
   int idx;
   if (vacant_pos.empty()) {
     idx = p_arr.size();
-    p_arr.push_back(TNode()); // need imporove
+    p_arr.push_back(TNode()); // need improve
   } else {
     idx = vacant_pos.back();
     vacant_pos.pop_back();

@@ -90,7 +90,7 @@ template <typename TPar, typename T>
 void OrderParaExporter::dump(int i_step, const std::vector<TPar>& p_arr,
                              CellListNode_2<TPar>& cl, const std::vector<T>& n_arr) {
   if (need_export(i_step)) {
-    Vec_2<double> gl_vm;
+    Vec_2<double> gl_vm{};
     int np = cl.get_par_num(n_arr);
     int gl_np;
     MPI_Reduce(&np, &gl_np, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
