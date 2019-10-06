@@ -8,6 +8,8 @@ public:
 
   void tangle(Vec_2<double> &pos) const;
 
+  void untangle(Vec_2<double>& v) const;
+
   const Vec_2<double> & l() const { return l_; }
   const Vec_2<double> & gl_l() const { return gl_l_; }
   const Vec_2<double> & gl_half_l() const { return gl_half_l_; }
@@ -30,5 +32,14 @@ inline void Domain_2::tangle(Vec_2<double>& pos) const {
   }
   if (!flag_comm_.y) {
     tangle_1(pos.y, gl_l_.y);
+  }
+}
+
+inline void Domain_2::untangle(Vec_2<double>& v) const {
+  if (!flag_comm_.x) {
+    untangle_1(v.x, gl_l_.x, gl_half_l_.x);
+  }
+  if (flag_comm_.y) {
+    untangle_1(v.y, gl_l_.y, gl_half_l_.y);
   }
 }

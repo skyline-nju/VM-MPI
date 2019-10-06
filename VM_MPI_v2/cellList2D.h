@@ -15,9 +15,6 @@
 /**
  * @brief Get a vector that offsets the periodic boundary condition
  *
- * This function works well, however, CellListBase_2::get_offset fails to give
- * expected results, for unknown reasons.
- *
  * @tparam TCellList     Template for cell list
  * @param pos            Position of a particle
  * @param cl             Cell list
@@ -67,8 +64,6 @@ public:
   const Vec2d& gl_l() const { return gl_l_; }
   const Vec_2<bool>& flag_ext() const { return flag_ext_; }
   const Vec_2<int>& cells_size() const { return n_; }
-
-  Vec_2<double> get_offset(const Vec2d &pos) const;
 
   void set_padding();
 

@@ -14,26 +14,25 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
+
+  double Lx = atof(argv[1]);
+  double Ly = atof(argv[2]);
+  double eta = atof(argv[3]);
+  int seed = atoi(argv[4]);
+  int n_step = atoi(argv[5]);
+  Vec_2<double> gl_l(Lx, Ly);
+
+  double rho0 = 1;
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  std::cout << "rank =" << my_rank << std::endl;
-  //double L = atof(argv[1]);
-  double L = 100;
-  Vec_2<double> gl_l(L, L);
-  //double eta = atof(argv[2]);
-  double eta = 0.1;
-  double rho0 = 1;
-  unsigned long long seed = 1;
-  Ranq1 myran(seed + my_rank);
-  //int n_step = atoi(argv[4]);
-  int n_step = 10000;
+  //Ranq1 myran(seed + my_rank);
   double v0 = 0.5;
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
-  int snap_inteval = 5000;
-  int snap_block_size = 2;
-  //int box_len_birth = 4;
 
-  run_test(gl_par_num, gl_l, eta, seed, n_step);
-
+  if (argc == 6) {
+    run_test(gl_par_num, gl_l, eta, seed, n_step);
+  } else {
+    run_test(gl_par_num, gl_l, eta, seed, n_step, argv[6]);
+  }
 }

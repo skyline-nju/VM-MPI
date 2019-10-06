@@ -22,7 +22,7 @@ void pack_ghost_par(double *buf, int &buf_size,
     if (*head) {
       TNode *cur_node = *head;
       do {
-        cur_node->copy(buf, pos);
+        cur_node->copy_to(buf, pos);
         cur_node = cur_node->next;
       } while (cur_node);
     }
@@ -58,7 +58,7 @@ void pack_leaving_par(const std::vector<TNode> &p_arr,
     if (*head) {
       TNode *cur_node = *head;
       do {
-        cur_node->copy(buf, buf_pos);
+        cur_node->copy_to(buf, buf_pos);
         vacant_pos.push_back(cur_node - p0);
         cur_node = cur_node->next;
       } while (cur_node);

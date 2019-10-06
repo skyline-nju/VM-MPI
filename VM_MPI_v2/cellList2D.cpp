@@ -75,27 +75,3 @@ void CellListBase_2::partition(const Vec_2<double>& l, double r_cut,
   }
 }
 
-/**
- * @brief Get a vector to offset the periodic boundary condition
- * !!! The function cannot give correct results for unknown reasons.
- *
- * @param pos             Position of a particle
- * @return Vec_2<double>
- */
-Vec_2<double> CellListBase_2::get_offset(const Vec2d& pos) const {
-  Vec_2<double> offset{};
-  Vec_2<double> dR = pos - origin_;
-
-  //! If canceling the annotation of the following line, the function can give
-  //! right results.
-  // std::cout << dR << std::endl;
-
-  for (int dim = 0; dim < 2; dim++) {
-    if (dR[dim] < 0) {
-      offset[dim] = gl_l_[dim];
-    } else if (dR[dim] > l_[dim]) {
-      offset[dim] = -gl_l_[dim];
-    }
-  }
-  return offset;
-}
