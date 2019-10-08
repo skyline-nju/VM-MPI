@@ -1,6 +1,5 @@
 #pragma once
 #include "config.h"
-#include "domain2D.h"
 #include "cellList2D.h"
 #include "particle2D.h"
 #include "exporter2D.h"
@@ -14,9 +13,9 @@ int ini_my_par_num(int gl_par_num);
 
 void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max);
 
-template <typename TNode, typename TRan>
+template <typename TNode, typename TRan, typename TDomain>
 void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
-              CellListNode_2<TNode>& cl, Domain_2 &dm) {
+              CellListNode_2<TNode>& cl, TDomain &dm) {
   int my_par_num, n_max;
   set_particle_num(gl_par_num, my_par_num, n_max);
   p_arr.reserve(n_max);
@@ -26,10 +25,10 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
   cl.create(p_arr);
 }
 
-template <typename TNode>
+template <typename TNode, typename TDomain>
 void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
                    CellListNode_2<TNode>& cl,
-                   Domain_2 &dm, const char* filename) {
+                   TDomain &dm, const char* filename) {
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 

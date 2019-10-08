@@ -11,8 +11,6 @@ struct block_t {
 
 void find_shell(const Vec_2<int> &n, const Vec_2<int> &thickness, Vec_2<block_t> shell[2]);
 
-Vec_2<int> decompose_domain(const Vec_2<double> &gl_l);
-
 template <typename TNode>
 void pack_ghost_par(double *buf, int &buf_size,
                     CellListNode_2<TNode>& cl,
@@ -116,12 +114,8 @@ void unpack_arrived_par(const double *buf, int buf_size,
 
 class Communicator {
 public:
-  Communicator(const Vec_2<double> &gl_l, double rho0, double amplification,
-               const Vec_2<int> &cells_size, const Vec_2<int> &domains_size);
-
-  void find_neighbor(const Vec_2<int> &domain_rank,
-                     const Vec_2<int> &domain_size,
-                     Vec_2<bool> &flag_comm);
+  template <class TDomain>
+  Communicator(const TDomain& dm, double rho0, double amplification);
 
   int get_max_buf_size(double rho0, double amplification,
                         const Vec_2<double> &l) const;
@@ -163,6 +157,24 @@ private:
 
   std::vector<int> vacant_pos_;
 };
+
+template<class TDomain>
+Communicator::Communicator(const TDomain& dm, double rho0, double amplification):
+  flag_comm_(dm.flag_comm()) {
+  my_rank_ = dm.rank().x + dm.rank().y * dm.size().x;
+  tot_proc_ = dm.size().x * dm.size().y;
+
+  //find_neighbor(dm.rank(), dm.size(), flag_comm_);
+  dm.find_neighbor(neighbor_);
+  set_comm_shell(dm.grid().n());
+  max_buf_size_ = get_max_buf_size(rho0, amplification, dm.l());
+  for (int i = 0; i < 4; i++) {
+    buf_[i] = new double[max_buf_size_];
+    buf_size_[i] = max_buf_size_;
+  }
+
+  vacant_pos_.reserve(max_buf_size_);
+}
 
 template <typename TPack, typename TUnpack, typename TFunc>
 void Communicator::exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,

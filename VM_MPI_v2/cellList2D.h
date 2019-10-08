@@ -103,7 +103,10 @@ public:
                  const Vec_2<bool> &flag_ext = Vec_2<bool>())
     : CellListBase_2(cell_size, lc, gl_l, origin, flag_ext), head_(n_cells_) {
   }
-
+  
+  template <typename TDomain>
+  CellListNode_2(const TDomain& dm) : CellListBase_2(dm.grid().n(), dm.grid().lc(), dm.gl_l(), dm.origin(), dm.flag_comm()),
+                                      head_(n_cells_) {}
 
   template <typename BiFunc1, typename BiFunc2>
   void for_each_pair(BiFunc1 f1, BiFunc2 f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;

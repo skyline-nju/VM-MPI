@@ -138,14 +138,10 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
   const double v0 = 0.5;
   double rho_0 = gl_par_num / (gl_l.x * gl_l.y);
 
-  Vec_2<int> domains_size = decompose_domain(gl_l);
-  Domain_2 dm(gl_l, domains_size);
-  Vec_2<int> cells_size{};
-  Vec_2<double> cell_len{};
-  CellListBase_2::partition(dm.l(), r_cut, cells_size, cell_len);
-  Vec_2<int> gl_cells_size(cells_size.x * domains_size.x, cells_size.y * domains_size.y);
-  CellListNode_2<node_t> cl(cells_size, cell_len, gl_l, dm.origin(), dm.flag_comm());
-  Communicator comm(gl_l, rho_0, 20., cells_size, domains_size);
+  Vec_2<int> proc_size(3, 1);
+  SubDomain_2 dm(gl_l, proc_size, r_cut);
+  CellListNode_2<node_t> cl(dm);
+  Communicator comm(dm, rho_0, 20.);
 
   if (file_in) {
     ini_from_snap(p_arr, gl_par_num, cl, dm, file_in);
@@ -179,13 +175,13 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
     move_forward(p, v0, noise, dm);
   };
 
-  exporter_ini(gl_par_num, eta, 0., n_step, seed, gl_l, domains_size);
+  exporter_ini(gl_par_num, eta, 0., n_step, seed, gl_l, dm.size());
   LogExporter *log_ex = nullptr;
   OrderParaExporter phi_ex(100);
   if (my_rank == 0) {
     log_ex = new LogExporter(10000);
   }
-  auto out = [log_ex, &phi_ex, my_rank, &dm, &gl_cells_size, &cells_size](int i, std::vector<node_t> &par_arr) {
+  auto out = [log_ex, &phi_ex, my_rank, &dm](int i, std::vector<node_t> &par_arr) {
     if (my_rank == 0) {
       log_ex->record(i);
     }
