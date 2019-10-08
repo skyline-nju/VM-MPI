@@ -58,8 +58,9 @@ void exporter_nc_ini(int gl_np, double eta0, double eps0, int steps, unsigned lo
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
 
-  create_output_folder();
-  set_base_name();
+  folder = "data" + delimiter;
+  create_output_folder(folder);
+  base_name = set_base_name();
   set_multi_nodes();
 }
 
@@ -92,10 +93,10 @@ NCSnapExporter::NCSnapExporter(int frame_interval) : BaseExporter(n_step, frame_
 
 
 NCFieldExporter::NCFieldExporter(int frame_interval,
-  const Vec_2<int>& bin_len,
-  const Vec_2<int>& domain_rank,
-  const Vec_2<int>& gl_cells_size,
-  const Vec_2<int>& my_cells_size)
+                                 const Vec_2<int>& bin_len,
+                                 const Vec_2<int>& domain_rank,
+                                 const Vec_2<int>& gl_cells_size,
+                                 const Vec_2<int>& my_cells_size)
   : frame_len_(NC_UNLIMITED), cg_box_len_(bin_len.x, bin_len.y) {
   time_idx_[0] = 0;
   n_steps_per_frame_ = frame_interval;

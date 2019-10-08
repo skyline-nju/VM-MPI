@@ -1,4 +1,5 @@
 #include "run2D.h"
+#include "exporter2D_b.h"
 
 int ini_my_par_num(int gl_par_num) {
 #ifdef USE_MPI
@@ -176,16 +177,22 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
   };
 
   exporter_ini(gl_par_num, eta, 0., n_step, seed, gl_l, dm.size());
+
   LogExporter *log_ex = nullptr;
   OrderParaExporter phi_ex(100);
+  SnapExporter snap_ex(100, n_step);
+  RhoxExpoerter rhox_ex(100, n_step, dm.grid(), dm.origin());
+
   if (my_rank == 0) {
     log_ex = new LogExporter(10000);
   }
-  auto out = [log_ex, &phi_ex, my_rank, &dm](int i, std::vector<node_t> &par_arr) {
+  auto out = [log_ex, &phi_ex, my_rank, &dm, &snap_ex, &rhox_ex](int i, std::vector<node_t> &par_arr) {
     if (my_rank == 0) {
       log_ex->record(i);
     }
     phi_ex.dump(i, par_arr);
+    snap_ex.dump(i, par_arr);
+    rhox_ex.dump(i, par_arr);
   };
 
   for (int i = 1; i <= n_step; i++) {

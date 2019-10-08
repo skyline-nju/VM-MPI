@@ -13,15 +13,14 @@ unsigned long long seed;
 std::string folder;
 std::string base_name;
 
-void create_output_folder() {
-  folder = "data" + delimiter;
+void create_output_folder(const std::string &fd) {
   if (my_proc == 0) {
-    mkdir(folder);
+    mkdir(fd);
   }
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void set_base_name() {
+std::string set_base_name() {
   char str[100];
 #ifdef DISORDER_ON
   if (gl_l.x == gl_l.y) {
@@ -30,21 +29,13 @@ void set_base_name() {
     snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
   }
 #else
-#ifdef BIRTH_DEATH
-  if (gl_l.x == gl_l.y) {
-    snprintf(str, 100, "%g_%.3f_%g_%.1f_%llu", gl_l.x, eta, eps * 1e8, rho0, seed);
-  } else {
-    snprintf(str, 100, "%g_%g_%.3f_%g_%.1f_%llu", gl_l.x, gl_l.y, eta, eps * 1e8, rho0, seed);
-  }
-#else
   if (gl_l.x == gl_l.y) {
     snprintf(str, 100, "%g_%.2f_%.1f_%llu", gl_l.x, eta, rho0, seed);
   } else {
     snprintf(str, 100, "%g_%g_%.2f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho0, seed);
   }
 #endif
-#endif
-  base_name = str;
+  return std::string(str);
 }
 
 
@@ -61,8 +52,10 @@ void exporter_ini(int gl_np, double eta0, double eps0, int steps, unsigned long 
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
 
-  create_output_folder();
-  set_base_name();
+  folder = "data" + delimiter;
+  create_output_folder(folder);
+  base_name = set_base_name();
+
   //set_multi_nodes();
 }
 

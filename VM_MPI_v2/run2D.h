@@ -69,36 +69,6 @@ void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
   cl.create(p_arr);
 }
 
-template <typename TNode>
-void cal_force(std::vector<TNode> &p_arr, CellListNode_2<TNode> &cl, Communicator &comm) {
-  int n_ghost = 0;
-  comm.comm_before_cal_force(p_arr, cl, n_ghost);
-
-  auto f1 = [](TNode *pi, TNode *pj) {
-    pi->interact(*pj);
-  };
-  auto f3 = [](TNode *pi, TNode *pj, const Vec_2<double> &offset) {
-    pi->interact(*pj, offset);
-  };
-  cl.for_each_pair_fast(f1, f3);
-  comm.clear_padded_particles(cl, p_arr, n_ghost);
-}
-
-template <typename TNode>
-void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicator& comm, Domain_2& dm) {
-  int n_ghost = 0;
-  comm.comm_before_cal_force(p_arr, cl, n_ghost);
-
-  auto f1 = [](TNode *pi, TNode *pj) {
-    pi->interact(*pj);
-  };
-  auto f2 = [&dm](TNode *pi, TNode *pj) {
-    pi->interact(*pj, dm);
-  };
-  cl.for_each_pair_slow(f1, f2);
-  comm.clear_padded_particles(cl, p_arr, n_ghost);
-}
-
 template <typename TNode, typename TFunc>
 void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicator& comm, TFunc for_all_pair_force) {
   int n_ghost = 0;

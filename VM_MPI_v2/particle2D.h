@@ -17,6 +17,8 @@ public:
 
   void copy_to(double* dest, int& idx) const;
 
+  double theta() const { return atan2(ori.y, ori.x); }
+
   Vec_2<double> pos;
   Vec_2<double> ori;
   Vec_2<double> ori_next;
@@ -74,8 +76,8 @@ void nematic_align(Par& p1, Par& p2, const Vec_2<double>& dR) {
   }
 }
 
-template <class Par>
-void nematic_align(Par& p1, Par& p2, const Domain_2& domain) {
+template <class Par, class TDomain>
+void nematic_align(Par& p1, Par& p2, const TDomain& domain) {
   Vec_2<double> dR = p2.pos - p1.pos;
   domain.untangle(dR);
   nematic_align(p1, p2, dR);

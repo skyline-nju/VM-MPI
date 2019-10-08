@@ -9,9 +9,9 @@
 void exporter_ini(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
                 const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0);
 
-void create_output_folder();
+void create_output_folder(const std::string& fd);
 
-void set_base_name();
+std::string set_base_name();
 
 int get_start_particle_num(int particle_num);
 
