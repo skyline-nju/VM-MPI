@@ -31,8 +31,6 @@
     <ClInclude Include="particle2D.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="cellList2D.cpp" />
-    <ClCompile Include="communicator2D.cpp" />
     <ClCompile Include="domain2D.cpp" />
     <ClCompile Include="exporter2D.cpp" />
     <ClCompile Include="exporter2D_b.cpp" />

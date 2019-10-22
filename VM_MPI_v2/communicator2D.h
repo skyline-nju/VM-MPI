@@ -4,17 +4,32 @@
 #include "cellList2D.h"
 #include <algorithm>
 
-struct block_t {
-  Vec_2<int> beg;
-  Vec_2<int> end;
-};
-
-void find_shell(const Vec_2<int> &n, const Vec_2<int> &thickness, Vec_2<block_t> shell[2]);
+template <typename T>  // default type for T is int
+void find_shell(const Vec_2<T>& n, const Vec_2<T>& thickness, Vec_2<RectBlock_2<T>> shell[2]) {
+  for (int ori = 0; ori < 2; ori++) {
+    if (thickness[ori]) {
+      for (int dim = 0; dim < 2; dim++) {
+        if (dim == ori) {
+          shell[0][ori].beg[dim] = 0;
+          shell[0][ori].end[dim] = 1;
+          shell[1][ori].beg[dim] = n[dim] - 1;
+          shell[1][ori].end[dim] = n[dim];
+        } else if (dim > ori) {
+          shell[0][ori].beg[dim] = shell[1][ori].beg[dim] = 0;
+          shell[0][ori].end[dim] = shell[1][ori].end[dim] = n[dim];
+        } else {
+          shell[0][ori].beg[dim] = shell[1][ori].beg[dim] = thickness[dim];
+          shell[0][ori].end[dim] = shell[1][ori].end[dim] = n[dim] - thickness[dim];
+        }
+      }
+    }
+  }
+}
 
 template <typename TNode>
 void pack_ghost_par(double *buf, int &buf_size,
                     CellListNode_2<TNode>& cl,
-                    const block_t& block) {
+                    const RectBlock_2<int>& block) {
   int pos = 0;
   auto f_copy = [&pos, buf](TNode **head) {
     if (*head) {
@@ -48,7 +63,7 @@ template <typename TNode>
 void pack_leaving_par(const std::vector<TNode> &p_arr,
                       std::vector<int> &vacant_pos,
                       CellListNode_2<TNode>& cl,
-                      const block_t &block,
+                      const RectBlock_2<int> &block,
                       double *buf, int &buf_size) {
   const TNode* p0 = &p_arr[0];
   int buf_pos = 0;
@@ -112,19 +127,21 @@ void unpack_arrived_par(const double *buf, int buf_size,
 }
 
 
-class Communicator {
+class Communicator_2 {
 public:
   template <class TDomain>
-  Communicator(const TDomain& dm, double rho0, double amplification);
+  Communicator_2(const TDomain& dm, double rho0, double amplification);
 
-  int get_max_buf_size(double rho0, double amplification,
-                        const Vec_2<double> &l) const;
+  template <typename T>
+  int get_max_buf_size(const T rho0, double amplification,
+                       const Vec_2<double> &l) const;
 
-  void set_comm_shell(const Vec_2<int> &cells_size);
+  template <typename T>
+  void set_comm_shell(const Vec_2<T> &cells_size);
 
   template <typename TPack, typename TUnpack, typename TFunc>
   void exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,
-                         const block_t &prev_block, const block_t &next_block,
+                         const RectBlock_2<int> &prev_block, const RectBlock_2<int> &next_block,
                          TPack pack, TUnpack unpack, TFunc do_sth);
 
   template <typename TNode>
@@ -148,8 +165,8 @@ private:
 
   Vec_2<bool> flag_comm_{};
   int neighbor_[2][2]{};
-  Vec_2<block_t> inner_shell_[2]{};
-  Vec_2<block_t> outer_shell_[2]{};
+  Vec_2<RectBlock_2<int>> inner_shell_[2]{};
+  Vec_2<RectBlock_2<int>> outer_shell_[2]{};
 
   double *buf_[4]{};
   int buf_size_[4]{};
@@ -158,13 +175,62 @@ private:
   std::vector<int> vacant_pos_;
 };
 
+template <typename T>
+int Communicator_2::get_max_buf_size(const T rho0, double amplification,
+  const Vec_2<double>& l) const {
+  std::vector<double> area;
+  if (flag_comm_.x) {
+    area.push_back(l.y);
+  }
+  if (flag_comm_.y) {
+    area.push_back(l.x);
+  }
+
+  int max_buf_size;
+  if (area.empty()) {
+    max_buf_size = 0;
+
+  } else {
+    std::sort(area.begin(), area.end(), [](double x, double y) {return x > y; });
+
+    int n0 = int(rho0 * area[0] * amplification);
+    max_buf_size = 4 * n0;
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    if (my_rank == 0) {
+      std::cout << "max area = " << area[0] << std::endl;
+      std::cout << "max particle number per communication: " << n0 << " particles" << std::endl;
+    }
+  }
+  return max_buf_size;
+}
+
+template <typename T>
+void Communicator_2::set_comm_shell(const Vec_2<T>& cells_size) {
+  Vec_2<int> thickness{};
+  for (int dim = 0; dim < 2; dim++) {
+    thickness[dim] = flag_comm_[dim] ? 1 : 0;
+  }
+
+  find_shell(cells_size, -thickness, inner_shell_);
+  for (int ori = 0; ori < 2; ori++) {
+    inner_shell_[0][ori].beg += thickness;
+    inner_shell_[0][ori].end += thickness;
+    inner_shell_[1][ori].beg += thickness;
+    inner_shell_[1][ori].end += thickness;
+  }
+
+  const Vec_2<int> extended_cells_size = cells_size + thickness * 2;
+  find_shell(extended_cells_size, thickness, outer_shell_);
+}
+
 template<class TDomain>
-Communicator::Communicator(const TDomain& dm, double rho0, double amplification):
+Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplification):
   flag_comm_(dm.flag_comm()) {
   my_rank_ = dm.rank().x + dm.rank().y * dm.size().x;
   tot_proc_ = dm.size().x * dm.size().y;
 
-  //find_neighbor(dm.rank(), dm.size(), flag_comm_);
   dm.find_neighbor(neighbor_);
   set_comm_shell(dm.grid().n());
   max_buf_size_ = get_max_buf_size(rho0, amplification, dm.l());
@@ -177,8 +243,8 @@ Communicator::Communicator(const TDomain& dm, double rho0, double amplification)
 }
 
 template <typename TPack, typename TUnpack, typename TFunc>
-void Communicator::exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,
-                                     const block_t& prev_block, const block_t& next_block,
+void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,
+                                     const RectBlock_2<int>& prev_block, const RectBlock_2<int>& next_block,
                                      TPack pack, TUnpack unpack, TFunc do_sth) {
   MPI_Request req[4];
   MPI_Status stat[4];
@@ -211,10 +277,10 @@ void Communicator::exchange_particle(int prev_proc, int next_proc, int tag_bw, i
 }
 
 template <typename TNode>
-void Communicator::comm_before_cal_force(std::vector<TNode>& p_arr,
+void Communicator_2::comm_before_cal_force(std::vector<TNode>& p_arr,
                                          CellListNode_2<TNode>& cl, int& n_ghost) {
   n_ghost = 0;
-  auto pack = [&cl](double *buf, int &buf_size, const block_t& block) {
+  auto pack = [&cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
     pack_ghost_par(buf, buf_size, cl, block);
   };
 
@@ -239,7 +305,7 @@ void Communicator::comm_before_cal_force(std::vector<TNode>& p_arr,
 }
 
 template <typename TNode>
-void Communicator::clear_padded_particles(CellListNode_2<TNode>& cl,
+void Communicator_2::clear_padded_particles(CellListNode_2<TNode>& cl,
                                           std::vector<TNode>& p_arr, int n_ghost) {
   for (int dim = 0; dim < 2; dim++) {
     if (cl.flag_ext()[dim]) {
@@ -253,8 +319,8 @@ void Communicator::clear_padded_particles(CellListNode_2<TNode>& cl,
 }
 
 template <typename TNode>
-void Communicator::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl) {
-  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const block_t& block) {
+void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl) {
+  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
     pack_leaving_par(p_arr, vacant_pos_, cl, block, buf, buf_size);
   };
 
@@ -285,9 +351,9 @@ void Communicator::comm_after_integration(std::vector<TNode>& p_arr, CellListNod
 }
 
 template <typename TNode, typename T1, typename T2>
-void Communicator::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
+void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
                                           std::vector<T1>& n_arr, std::vector<Vec_2<T2>>& v_arr) {
-  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const block_t& block) {
+  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2& block) {
     pack_leaving_par(p_arr, vacant_pos_, cl, block, buf, buf_size);
   };
 

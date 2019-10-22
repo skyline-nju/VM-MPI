@@ -70,7 +70,7 @@ void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
 }
 
 template <typename TNode, typename TFunc>
-void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicator& comm, TFunc for_all_pair_force) {
+void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicator_2& comm, TFunc for_all_pair_force) {
   int n_ghost = 0;
   comm.comm_before_cal_force(p_arr, cl, n_ghost);
   for_all_pair_force();
@@ -78,7 +78,7 @@ void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicato
 }
 
 template <typename TNode, typename UniFunc>
-void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator& comm) {
+void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
     f_move(*it);

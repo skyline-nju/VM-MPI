@@ -50,12 +50,6 @@
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="cellList2D.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="communicator2D.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="domain2D.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
