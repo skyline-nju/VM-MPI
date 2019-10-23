@@ -54,16 +54,22 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
   int tot_proc;
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   Vec_2<int> proc_size(tot_proc, 1);
-  SubDomain_2 dm(gl_l, proc_size, r_cut);
-  CellListNode_2<node_t> cl(dm);
-  Communicator_2 comm(dm, rho_0, 20.);
+  //SubDomain_2 dm(gl_l, proc_size, r_cut);
+  PeriodicDomain_2 dm(gl_l, proc_size);
+  Grid_2 grid(dm, r_cut);
+
+  CellListNode_2<node_t> cl(dm, grid);
+  //Communicator_2 comm(dm, rho_0, 20.);
+  Communicator_2 comm(dm, grid, rho_0, 20.);
 
   if (file_in) {
     ini_from_snap(p_arr, gl_par_num, cl, dm, file_in);
   } else {
     ini_rand(p_arr, gl_par_num, myran, cl, dm);
   }
-
+  
+  std::cout << p_arr.size() << " particles at proc " << my_rank << std::endl;
+       
   auto f1 = [](node_t* p1, node_t* p2) {
     polar_align(*p1, *p2, p2->pos - p1->pos);
   };
@@ -90,12 +96,12 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
     move_forward(p, v0, noise, dm);
   };
 
-  exporter_ini(gl_par_num, eta, 0., n_step, seed, gl_l, dm.size());
+  exporter_ini(gl_par_num, eta, 0., n_step, seed, gl_l, dm.proc_size());
 
   LogExporter *log_ex = nullptr;
   OrderParaExporter phi_ex(100);
-  SnapExporter snap_ex(100, n_step);
-  RhoxExpoerter rhox_ex(100, n_step, dm.grid(), dm.origin());
+  SnapExporter snap_ex(10000, n_step);
+  RhoxExpoerter rhox_ex(10000, n_step, grid, dm.origin());
 
   if (my_rank == 0) {
     log_ex = new LogExporter(10000);
@@ -113,6 +119,7 @@ void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
     //cal_force(p_arr, cl, comm, dm);
     cal_force(p_arr, cl, comm, for_all_pair_force_fast);
     integrate(p_arr, cl, single_move, comm);
+
     out(i, p_arr);
   }
   std::cout << "finish" << std::endl;

@@ -8,3 +8,8 @@
 #define RANDOM_TORQUE
 
 #define OUTPUT_ON
+
+
+#ifndef USE_MPI
+#define MPI_PROC_NULL -1
+#endif

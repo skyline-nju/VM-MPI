@@ -10,53 +10,45 @@
 #include <algorithm>
 #include "vect.h"
 #include "node.h"
-#include "comn.h"
 
+/**
+ * @brief Rectangular blocks in 2D.
+ * 
+ * To define a rectangular blocks, the lower-left and upper-right corners of
+ * the block are recorded.
+ * 
+ * @tparam T integer type
+ */
 template <typename T>
 struct RectBlock_2 {
   RectBlock_2() = default;
-
-  RectBlock_2(const Vec_2<T>& n, const Vec_2<bool>& need_pad, const T pad_w);
-
-  T size_x() const { return end.x - beg.x; }
-  T size_y() const { return end.y - beg.y; }
-
-  Vec_2<T> beg;
-  Vec_2<T> end;
+  RectBlock_2(const Vec_2<T>& n) : beg(0, 0), end(n) {}
+  Vec_2<T> beg;   // the lower-left corner of the block
+  Vec_2<T> end;   // the upper-right corner of the block
 };
 
-template <typename T>
-RectBlock_2<T>::RectBlock_2(const Vec_2<T>& n, const Vec_2<bool>& need_pad, const T pad_w) {
-  if (need_pad.x) {
-    beg.x = pad_w;
-    end.x = n.x - pad_w;
-  } else {
-    beg.x = 0;
-    end.x = n.x;
-  }
-  if (need_pad.y) {
-    beg.y = pad_w;
-    end.y = n.y - pad_w;
-  } else {
-    beg.y = 0;
-    end.y = n.y;
-  }
-}
-
+/**
+ * @brief Base class of 2D celllist
+ * 
+ * The simulation domain of length l_.x * l_.y is divided into n_.x * n_.y cells.
+ * 
+ * If the whole domain is divided into several subdomains, then use flag_ext_ to
+ * indicate whether the subdomain is supposed to communicate with its adjacent
+ * subdomains. For example, the subdomain should be extended along x direction
+ * if the subdomain has two neighbor domains in the x direction.
+ */
 class CellListBase_2 {
 public:
   typedef Vec_2<double> Vec2d;
 
-  CellListBase_2(const Vec_2<int> &cell_size,
-                 const Vec2d &lc,
-                 const Vec2d &gl_l,
-                 const Vec2d &origin,
-                 const Vec_2<bool> &flag_ext);
+  template <class TDomain, class TGrid>
+  CellListBase_2(const TDomain& dm, const TGrid& grid, int pad_w=1);
 
   int get_nx(double x) const { return int((x - origin_.x) * lc_recip_.x); }
   int get_ny(double y) const { return int((y - origin_.y) * lc_recip_.y); }
   template <typename TPar>
-  int get_ic(const TPar &p) const { return get_nx(p.pos.x) + get_ny(p.pos.y) * n_.x; }
+  int get_ic(const TPar &p) const {
+    return get_nx(p.pos.x) + get_ny(p.pos.y) * n_.x; }
 
   int n_cells() const { return n_cells_; }
   const Vec2d& origin() const { return origin_; }
@@ -68,47 +60,53 @@ public:
   template <typename T>
   int get_par_num(const std::vector<T>& n_arr) const;
 
+  template <typename T>
+  Vec_2<double> get_pos_offset(const Vec_2<T>& pos) const;
 protected:
-  int n_cells_;
-  Vec_2<int> n_;
-  Vec_2<double> origin_;
-  Vec_2<double> lc_recip_;  //  the reciprocal of length of one cell
-  Vec_2<double> l_;
-  Vec_2<double> gl_l_;
-  Vec_2<bool> flag_ext_;
+  int n_cells_;             //total number of cells of the padded domain..
+  Vec_2<int> n_;            //the size of cells in x and y direction of the padded domain
+  Vec_2<double> origin_;    //the upper-left point of the padded domain 
+  Vec_2<double> lc_recip_;  //one over lc
+  Vec_2<double> l_;         //the length in x and y direction of the padded domain
+  Vec_2<double> gl_l_;      //the length in x and y direction of the global domain
+  Vec_2<bool> flag_ext_;    //whether the original domain is extended in x and y direction
 
-  RectBlock_2<int> real_block_;
-
-  const int cell_offset[4][2] = { { 0,  1 },
-                                  { 1, -1 },
-                                  { 1,  0 },
-                                  { 1,  1 }};
+  //the lower-left and upper-right corners of real cells w.r.t. the origin of the padded domain
+  RectBlock_2<int> real_cells_;  
+                                  
+  //the offset (drow, dcol) betwwen one cell and its neighbors
+  const int cell_offset[4][2] = { { 0,  1 },        // right
+                                  { 1, -1 },        // upper-left
+                                  { 1,  0 },        // upper
+                                  { 1,  1 }};       // upper-right
 };
 
-
-inline CellListBase_2::CellListBase_2(const Vec_2<int>& cell_size,
-                                      const Vec2d& lc,
-                                      const Vec2d& gl_l,
-                                      const Vec2d& origin,
-                                      const Vec_2<bool>& flag_ext)
-                                      : n_(cell_size), origin_(origin), lc_recip_(1./lc.x, 1./lc.y),
-                                      l_(lc* n_), gl_l_(gl_l), flag_ext_(flag_ext),
-                                      real_block_(cell_size, flag_ext_, 1) {
+template <class TDomain, class TGrid>
+CellListBase_2::CellListBase_2(const TDomain& dm, const TGrid& grid, int pad_w)
+                              :n_(grid.n()), origin_(dm.origin()),
+                               lc_recip_(grid.one_over_lc()),
+                               l_(dm.l()), gl_l_(dm.gl_l()),
+                               flag_ext_(dm.proc_size().x > 1, dm.proc_size().y > 1),
+                               real_cells_(n_) {
   for (int dim = 0; dim < 2; dim++) {
-    if (flag_ext[dim]) {
-      origin_[dim] -= lc[dim];
-      n_[dim] += 2;
-      l_[dim] += 2. * lc[dim];
+    if (flag_ext_[dim]) {
+      origin_[dim] -= pad_w * grid.lc()[dim];
+      n_[dim] += 2 * pad_w;
+      l_[dim] += 2 * pad_w * grid.lc()[dim];
+      real_cells_.beg[dim] = pad_w;
+      real_cells_.end[dim] = n_[dim] - pad_w;
     }
   }
   n_cells_ = n_.x * n_.y;
+
+  std::cout << "Success to create cell list with size " << n_ << std::endl;
 }
 
 template <typename T>
 int CellListBase_2::get_par_num(const std::vector<T>& n_arr) const {
   int n_sum = 0;
-  for (int row = real_block_.beg.y; row < real_block_.end.y; row++) {
-    for (int col = real_block_.beg.x; col < real_block_.end.x; col++) {
+  for (int row = real_cells_.beg.y; row < real_cells_.end.y; row++) {
+    for (int col = real_cells_.beg.x; col < real_cells_.end.x; col++) {
       int ic = col + row * n_.x;
       n_sum += n_arr[ic];
     }
@@ -116,6 +114,29 @@ int CellListBase_2::get_par_num(const std::vector<T>& n_arr) const {
   return n_sum;
 }
 
+template <typename T>
+Vec_2<double> CellListBase_2::get_pos_offset(const Vec_2<T>& pos) const {
+  Vec_2<double> offset{};
+  Vec_2<double> dR = pos - origin_;
+  for (int dim = 0; dim < 2; dim++) {
+    if (dR[dim] < 0) {
+      offset[dim] = gl_l_[dim];
+    } else if (dR[dim] > l_[dim]) {
+      offset[dim] = -gl_l_[dim];
+    }
+  }
+  return offset;
+}
+
+/**
+ * @brief cell list constituted by nodes with head and tail pointers.
+ * 
+ * The particla class is wrapped by the BiNode class so that one can access the
+ * the paricles by the linked list they constitute. For each cell, one linked
+ * list is assigned.  
+ * 
+ * @tparam TNode template class for node 
+ */
 template <typename TNode>
 class CellListNode_2 : public CellListBase_2 {
 public:
@@ -123,27 +144,18 @@ public:
   typedef typename std::vector<TNode*>::const_iterator CIT;
   typedef Vec_2<int> Vec2i;
 
-  CellListNode_2(const Vec_2<int> &cell_size,
-                 const Vec2d &lc,
-                 const Vec2d &gl_l,
-                 const Vec2d &origin = Vec2d(),
-                 const Vec_2<bool> &flag_ext = Vec_2<bool>())
-    : CellListBase_2(cell_size, lc, gl_l, origin, flag_ext), head_(n_cells_) {
-  }
-  
-  template <typename TDomain>
-  CellListNode_2(const TDomain& dm) : CellListBase_2(dm.grid().n(), dm.grid().lc(), dm.gl_l(), dm.origin(), dm.flag_comm()),
-                                      head_(n_cells_) {}
+  template <typename TDomain, typename TGrid>
+  CellListNode_2(const TDomain& dm, const TGrid& grid) : CellListBase_2(dm, grid), head_(n_cells_) {}
 
   template <typename BiFunc1, typename BiFunc2>
   void for_each_pair(BiFunc1 f1, BiFunc2 f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
   template <typename BiFunc1, typename BiFunc2>
-  void for_each_pair(BiFunc1 f1, BiFunc2 f2) const { for_each_pair(f1, f2, Vec_2<int>(), real_block_.end); }
+  void for_each_pair(BiFunc1 f1, BiFunc2 f2) const { for_each_pair(f1, f2, Vec_2<int>(), real_cells_.end); }
 
   template <typename BiFunc, typename TriFunc>
   void for_each_pair_fast(BiFunc f1, TriFunc f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
   template <typename BiFunc, typename TriFunc>
-  void for_each_pair_fast(BiFunc f1, TriFunc f2) const { for_each_pair_fast(f1, f2, Vec_2<int>(), real_block_.end); }
+  void for_each_pair_fast(BiFunc f1, TriFunc f2) const { for_each_pair_fast(f1, f2, Vec_2<int>(), real_cells_.end); }
 
   template <typename BiFunc1, typename BiFunc2>
   void for_each_pair_slow(BiFunc1 f1, BiFunc2 f2, const Vec2i &ic_beg, const Vec2i &ic_end) const;
@@ -162,8 +174,6 @@ public:
   void recreate(std::vector<TNode> &p_arr, std::vector<T1> &num_arr, std::vector<Vec_2<T2>> &v_arr);
 
   void add_node(TNode &p) { p.append_at_front(&head_[get_ic(p)]); }
-  template <typename T1, typename T2>
-  void add_node(TNode &p, std::vector<T1> &n_arr, std::vector<T2> &v_arr);
 
   void clear(const Vec2i &first, const Vec2i &last);
 
@@ -218,7 +228,7 @@ void CellListNode_2<TNode>::for_each_pair_slow(BiFunc1 f1, BiFunc2 f2,
 template <typename TNode>
 template <typename BiFunc1, typename BiFunc2>
 void CellListNode_2<TNode>::for_each_pair_slow(BiFunc1 f1, BiFunc2 f2) const {
-  Vec_2<int> beg = real_block_.beg;
+  Vec_2<int> beg = real_cells_.beg;
   Vec_2<int> end = n_;
   if (flag_ext_.x) {
     beg.x = 0;
@@ -238,7 +248,7 @@ void CellListNode_2<TNode>::for_each_pair(BiFunc1 f1, BiFunc2 f2,
                                           const Vec2i& ic_end) const {
   int y[2];
   int x[2];
-  int i[8];
+  int i[4];
 
   for (y[0] = ic_beg.y; y[0] < ic_end.y; y[0]++) {
     y[1] = y[0] + 1;
@@ -280,7 +290,7 @@ void CellListNode_2<TNode>::for_each_pair_fast(BiFunc f1, TriFunc f2,
                                                const Vec2i& ic_end) const {
   int y[2];
   int x[2];
-  int i[8];
+  int i[4];
 
   for (y[0] = ic_beg.y; y[0] < ic_end.y; y[0]++) {
     double ly = 0;
@@ -371,23 +381,6 @@ void CellListNode_2<TNode>::for_each_cell(UniFunc f, const Vec2i& beg, const Vec
       f(&head_[ic]);
     }
   }
-}
-
-template <typename TNode>
-template <typename T1, typename T2>
-void CellListNode_2<TNode>::add_node(TNode& p, std::vector<T1>& n_arr, std::vector<T2>& v_arr) {
-  const int ic = get_ic(p);
-  n_arr[ic] += 1;
-#ifdef POLAR_ALIGN
-  v_arr[ic] += p.ori;
-#else
-  if (v_arr[ic].dot(p.ori) >= 0.) {
-    v_arr[ic] += p.ori;
-  } else {
-    v_arr[ic] -= p.ori;
-  }
-#endif
-  p.append_at_front(&head_[ic]);
 }
 
 template <typename TNode>
@@ -503,26 +496,4 @@ void CellListNode_2<TNode>::add_particle(std::vector<TNode>& p_arr, std::vector<
   }
   p_arr[idx].update(pos, vel);
   add_node(p_arr[idx]);
-}
-
-/**
- * @brief Get a vector that offsets the periodic boundary condition
- *
- * @tparam TCellList     Template for cell list
- * @param pos            Position of a particle
- * @param cl             Cell list
- * @return Vec_2<double>
- */
-template <typename TCellList>
-Vec_2<double> get_offset(const Vec_2<double>& pos, const TCellList& cl) {
-  Vec_2<double> offset{};
-  Vec_2<double> dR = pos - cl.origin();
-  for (int dim = 0; dim < 2; dim++) {
-    if (dR[dim] < 0) {
-      offset[dim] = cl.gl_l()[dim];
-    } else if (dR[dim] > cl.l()[dim]) {
-      offset[dim] = -cl.gl_l()[dim];
-    }
-  }
-  return offset;
 }

@@ -49,7 +49,8 @@ void unpack_ghost_par(const double *buf, int buf_size,
                       CellListNode_2<TNode>& cl,
                       std::vector<TNode> &p_arr,
                       int &n_ghost) {
-  const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  //const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
     auto idx_last = p_arr.size();
     p_arr.emplace_back(&buf[buf_pos]);
@@ -87,7 +88,9 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         CellListNode_2<TNode>& cl,
                         std::vector<TNode> &p_arr,
                         std::vector<int> &vacant_pos) {  //! should be sorted in descending order
-  const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  //const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
+  
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
     int idx;
     if (vacant_pos.empty()) {
@@ -110,7 +113,9 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         std::vector<int> &vacant_pos, //! should be sorted in descending order
                         std::vector<T1> &n_arr,
                         std::vector<Vec_2<T2>> &v_arr) {  
-  const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  //const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+  const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
+
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
     int idx;
     if (vacant_pos.empty()) {
@@ -131,6 +136,9 @@ class Communicator_2 {
 public:
   template <class TDomain>
   Communicator_2(const TDomain& dm, double rho0, double amplification);
+
+  template <class TDomain, class TGrid>
+  Communicator_2(const TDomain& dm, const TGrid& grid, double rho0, double amplification);
 
   template <typename T>
   int get_max_buf_size(const T rho0, double amplification,
@@ -177,7 +185,7 @@ private:
 
 template <typename T>
 int Communicator_2::get_max_buf_size(const T rho0, double amplification,
-  const Vec_2<double>& l) const {
+                                     const Vec_2<double>& l) const {
   std::vector<double> area;
   if (flag_comm_.x) {
     area.push_back(l.y);
@@ -227,7 +235,7 @@ void Communicator_2::set_comm_shell(const Vec_2<T>& cells_size) {
 
 template<class TDomain>
 Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplification):
-  flag_comm_(dm.flag_comm()) {
+                               flag_comm_(dm.flag_comm()) {
   my_rank_ = dm.rank().x + dm.rank().y * dm.size().x;
   tot_proc_ = dm.size().x * dm.size().y;
 
@@ -242,10 +250,26 @@ Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplificat
   vacant_pos_.reserve(max_buf_size_);
 }
 
+template <class TDomain, class TGrid>
+Communicator_2::Communicator_2(const TDomain& dm, const TGrid& grid, double rho0, double amplification):
+                              flag_comm_(dm.proc_size().x > 1, dm.proc_size().y > 1) {
+  my_rank_ = dm.proc_rank().x + dm.proc_rank().y * dm.proc_size().x;
+  tot_proc_ = dm.proc_size().x * dm.proc_size().y;
+
+  dm.find_neighbor(neighbor_);
+  set_comm_shell(grid.n());
+  max_buf_size_ = get_max_buf_size(rho0, amplification, dm.l());
+  for (int i = 0; i < 4; i++) {
+    buf_[i] = new double[max_buf_size_];
+    buf_size_[i] = max_buf_size_;
+  }
+
+  vacant_pos_.reserve(max_buf_size_);
+}
 template <typename TPack, typename TUnpack, typename TFunc>
 void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,
-                                     const RectBlock_2<int>& prev_block, const RectBlock_2<int>& next_block,
-                                     TPack pack, TUnpack unpack, TFunc do_sth) {
+                                       const RectBlock_2<int>& prev_block, const RectBlock_2<int>& next_block,
+                                       TPack pack, TUnpack unpack, TFunc do_sth) {
   MPI_Request req[4];
   MPI_Status stat[4];
   for (int i = 0; i < 4; i++) {
@@ -263,7 +287,6 @@ void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw,
 
   //! do something while waiting
   do_sth();
-
   MPI_Wait(&req[0], &stat[0]);
   MPI_Get_count(&stat[0], MPI_DOUBLE, &buf_size_[0]);
   unpack(buf_[0], buf_size_[0]);
@@ -272,13 +295,14 @@ void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw,
   MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size_[2]);
   unpack(buf_[2], buf_size_[2]);
 
+
   MPI_Wait(&req[1], &stat[1]);
   MPI_Wait(&req[3], &stat[3]);
 }
 
 template <typename TNode>
 void Communicator_2::comm_before_cal_force(std::vector<TNode>& p_arr,
-                                         CellListNode_2<TNode>& cl, int& n_ghost) {
+                                           CellListNode_2<TNode>& cl, int& n_ghost) {
   n_ghost = 0;
   auto pack = [&cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
     pack_ghost_par(buf, buf_size, cl, block);
@@ -348,12 +372,13 @@ void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListN
   }
 
   cl.make_compact(p_arr, vacant_pos_);
+
 }
 
 template <typename TNode, typename T1, typename T2>
 void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
-                                          std::vector<T1>& n_arr, std::vector<Vec_2<T2>>& v_arr) {
-  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2& block) {
+                                            std::vector<T1>& n_arr, std::vector<Vec_2<T2>>& v_arr) {
+  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
     pack_leaving_par(p_arr, vacant_pos_, cl, block, buf, buf_size);
   };
 

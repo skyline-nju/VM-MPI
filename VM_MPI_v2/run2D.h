@@ -84,19 +84,10 @@ void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_m
     f_move(*it);
   }
   cl.recreate(p_arr);
-  comm.comm_after_integration(p_arr, cl);
-}
 
-//template <typename TNode, typename UniFunc, typename T1, typename T2>
-//void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move,
-//               Communicator &comm, std::vector<T1> &n_arr, std::vector<Vec_2<T2>> &v_arr) {
-//  const auto end = p_arr.end();
-//  for (auto it = p_arr.begin(); it != end; ++it) {
-//    f_move(*it);
-//  }
-//  cl.recreate(p_arr, n_arr, v_arr);
-//  comm.comm_after_integration(p_arr, cl, n_arr, v_arr);
-//}
+  comm.comm_after_integration(p_arr, cl);
+
+}
 
 template <typename TNode, typename TInteract, typename TIntegrate, typename TOut>
 void run(std::vector<TNode> &p_arr, TInteract interact_all,
@@ -109,11 +100,6 @@ void run(std::vector<TNode> &p_arr, TInteract interact_all,
     out(i, p_arr);
   }
 }
-
-//void run_birth_death(int gl_par_num, const Vec_2<double>& gl_l,
-//                     double eta, double alpha, unsigned long long seed,
-//                     int n_step, int snap_interval, int snap_block_size,
-//                     int box_len_birth);
 
 void run_test(int gl_par_num, const Vec_2<double>&gl_l, double eta,
               unsigned long long seed, int n_step, const char* file_in = nullptr);
