@@ -14,8 +14,8 @@
 /**
  * @brief Rectangular blocks in 2D.
  * 
- * To define a rectangular blocks, the lower-left and upper-right corners of
- * the block are recorded.
+ * Define a rectangular block, the lower-left and upper-right corners of the which
+ * are recorded.
  * 
  * @tparam T integer type
  */
@@ -35,7 +35,7 @@ struct RectBlock_2 {
  * If the whole domain is divided into several subdomains, then use flag_ext_ to
  * indicate whether the subdomain is supposed to communicate with its adjacent
  * subdomains. For example, the subdomain should be extended along x direction
- * if the subdomain has two neighbor domains in the x direction.
+ * if the subdomain has two neighbor domains along that direction.
  */
 class CellListBase_2 {
 public:
@@ -132,8 +132,17 @@ Vec_2<double> CellListBase_2::get_pos_offset(const Vec_2<T>& pos) const {
  * @brief cell list constituted by nodes with head and tail pointers.
  * 
  * The particla class is wrapped by the BiNode class so that one can access the
- * the paricles by the linked list they constitute. For each cell, one linked
- * list is assigned.  
+ * the paricles by the linked list they constitute. For each cell, one head
+ * pointer for a linked list is assigned.
+ * 
+ * Provide three ways to visit each pair of particles. Call one of them to calculate
+ * pair force among particles.
+ * 
+ * When particles move, the celllist need be upgraded. If the displacement of a
+ * particle during one time step is comparable to the length of one cell, it's highly
+ * possible that the particle would move into a new cell, thus every step we recreate
+ * all cell lists. Otherwise most particles remain to stay in the previous cell, thus
+ * only a low fracton of lists where particle had leave or join in are upgraded.
  * 
  * @tparam TNode template class for node 
  */
@@ -167,11 +176,7 @@ public:
 
   void create(std::vector<TNode> &p_arr);
   void recreate(std::vector<TNode> &p_arr);
-
-  template <typename T1, typename T2>
-  void create(std::vector<TNode> &p_arr, std::vector<T1> &num_arr, std::vector<Vec_2<T2>> &v_arr);
-  template <typename T1, typename T2>
-  void recreate(std::vector<TNode> &p_arr, std::vector<T1> &num_arr, std::vector<Vec_2<T2>> &v_arr);
+  void update(TNode& p, int ic_old, int ic_new);
 
   void add_node(TNode &p) { p.append_at_front(&head_[get_ic(p)]); }
 
@@ -186,10 +191,6 @@ public:
 
   void reserve_particles(std::vector<TNode> &p_arr, int new_size, double magnification = 1.1);
 
-  int remove_particle(std::vector<TNode> &p_arr, int ic, int ip);
-
-  void add_particle(std::vector<TNode> &p_arr, std::vector<int> &vacant_pos,
-                    const Vec_2<double> &pos, const Vec_2<double> &vel);
 protected:
   std::vector<TNode*> head_;
 };
@@ -347,29 +348,16 @@ void CellListNode_2<TNode>::recreate(std::vector<TNode>& p_arr) {
   create(p_arr);
 }
 
-template <typename TNode>
-template <typename T1, typename T2>
-void CellListNode_2<TNode>::create(std::vector<TNode>& p_arr,
-                                   std::vector<T1>& num_arr,
-                                   std::vector<Vec_2<T2>>& v_arr) {
-  auto end = p_arr.end();
-  for (auto it = p_arr.begin(); it != end; ++it) {
-    add_node(*it, num_arr, v_arr);
+template<typename TNode>
+void CellListNode_2<TNode>::update(TNode& p, int ic_old, int ic_new) {
+  if (&p == head_[ic_old]) {
+    p.break_away(&head_[ic_old]);
+  } else {
+    p.break_away();
   }
+  p.append_at_front(&head_[ic_new]);
 }
 
-template <typename TNode>
-template <typename T1, typename T2>
-void CellListNode_2<TNode>::recreate(std::vector<TNode>& p_arr,
-                                     std::vector<T1>& num_arr,
-                                     std::vector<Vec_2<T2>>& v_arr) {
-  for (int ic = 0; ic < n_cells_; ic++) {
-    head_[ic] = nullptr;
-    num_arr[ic] = 0;
-    v_arr[ic].x = v_arr[ic].y = 0;
-  }
-  create(p_arr, num_arr, v_arr);
-}
 
 template <typename TNode>
 template <typename UniFunc>
@@ -456,44 +444,3 @@ void CellListNode_2<TNode>::reserve_particles(std::vector<TNode>& p_arr,
   std::cout << "new capacity = " << new_cap << std::endl;
 }
 
-template <typename TNode>
-int CellListNode_2<TNode>::remove_particle(std::vector<TNode>& p_arr, int ic, int ip) {
-  int real_ip = 0;
-  TNode *cur_node = head_[ic];
-  int count = 0;
-  do {
-    if (count == ip) {
-      if (count == 0) {
-        head_[ic] = cur_node->next;
-        if (cur_node->next) {
-          cur_node->next->prev = nullptr;
-        }
-      } else {
-        cur_node->prev->next = cur_node->next;
-        if (cur_node->next) {
-          cur_node->next->prev = cur_node->prev;
-        }
-      }
-      real_ip = cur_node - &p_arr[0];
-      break;
-    }
-    cur_node = cur_node->next;
-    count++;
-  } while (cur_node);
-  return real_ip;
-}
-
-template <typename TNode>
-void CellListNode_2<TNode>::add_particle(std::vector<TNode>& p_arr, std::vector<int>& vacant_pos,
-                                         const Vec_2<double>& pos, const Vec_2<double>& vel) {
-  int idx;
-  if (vacant_pos.empty()) {
-    idx = p_arr.size();
-    p_arr.push_back(TNode()); // need improve
-  } else {
-    idx = vacant_pos.back();
-    vacant_pos.pop_back();
-  }
-  p_arr[idx].update(pos, vel);
-  add_node(p_arr[idx]);
-}

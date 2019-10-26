@@ -31,8 +31,8 @@ int main(int argc, char* argv[]) {
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
 
   if (argc == 6) {
-    run_test(gl_par_num, gl_l, eta, seed, n_step);
+    run(gl_par_num, gl_l, eta, seed, n_step);
   } else {
-    run_test(gl_par_num, gl_l, eta, seed, n_step, argv[6]);
+    run(gl_par_num, gl_l, eta, seed, n_step, argv[6]);
   }
 }

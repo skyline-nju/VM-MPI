@@ -88,7 +88,6 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         CellListNode_2<TNode>& cl,
                         std::vector<TNode> &p_arr,
                         std::vector<int> &vacant_pos) {  //! should be sorted in descending order
-  //const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
   const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
   
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
@@ -112,8 +111,7 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         std::vector<TNode> &p_arr,
                         std::vector<int> &vacant_pos, //! should be sorted in descending order
                         std::vector<T1> &n_arr,
-                        std::vector<Vec_2<T2>> &v_arr) {  
-  //const Vec_2<double> offset = get_offset(Vec_2<double>(buf[0], buf[1]), cl);
+                        std::vector<Vec_2<T2>> &v_arr) {
   const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
 
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
@@ -160,12 +158,6 @@ public:
 
   template <typename TNode>
   void comm_after_integration(std::vector<TNode> &p_arr, CellListNode_2<TNode>& cl);
-
-  template <typename TNode, typename T1, typename T2>
-  void comm_after_integration(std::vector<TNode> &p_arr,
-                              CellListNode_2<TNode>& cl,
-                              std::vector<T1> &n_arr,
-                              std::vector<Vec_2<T2>> &v_arr);
 
 private:
   int tot_proc_ = 1;
@@ -373,36 +365,4 @@ void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListN
 
   cl.make_compact(p_arr, vacant_pos_);
 
-}
-
-template <typename TNode, typename T1, typename T2>
-void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl,
-                                            std::vector<T1>& n_arr, std::vector<Vec_2<T2>>& v_arr) {
-  auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
-    pack_leaving_par(p_arr, vacant_pos_, cl, block, buf, buf_size);
-  };
-
-  auto unpack = [&p_arr, this, &cl, &n_arr, &v_arr](double *buf, int buf_size) {
-    int new_size = buf_size / 4 + p_arr.size() - vacant_pos_.size();
-    if (new_size > p_arr.capacity()) {
-      cl.reserve_particles(p_arr, new_size);
-    }
-    unpack_arrived_par(buf, buf_size, cl, p_arr, vacant_pos_, n_arr, v_arr);
-  };
-
-  auto sort_descending = [this]() {
-    std::sort(vacant_pos_.begin(), vacant_pos_.end(), std::greater<int>());
-  };
-
-  for (int direction = 0; direction < 2; direction++) {
-    if (cl.flag_ext()[direction]) {
-      const int prev_proc = neighbor_[direction][0];
-      const int next_proc = neighbor_[direction][1];
-      const auto & prev_block = outer_shell_[0][direction];
-      const auto & next_block = outer_shell_[1][direction];
-      exchange_particle(prev_proc, next_proc, 24, 42, prev_block, next_block,
-        pack, unpack, sort_descending);
-    }
-  }
-  cl.make_compact(p_arr, vacant_pos_);
 }

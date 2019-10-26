@@ -13,3 +13,5 @@
 #ifndef USE_MPI
 #define MPI_PROC_NULL -1
 #endif
+
+//#define USE_NC

@@ -1,5 +1,5 @@
 #include "exporter2D_nc.h"
-
+#ifdef USE_NC
 Vec_2<double> gl_l;
 Vec_2<int> domain_sizes;
 double rho0;
@@ -291,3 +291,5 @@ void NCFieldExporter::set_coarse_grain_box(const Vec_2<int>& gl_cells_size,
     MPI_Abort(MPI_COMM_WORLD, -1);
   }
 }
+
+#endif

@@ -89,17 +89,19 @@ void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_m
 
 }
 
-template <typename TNode, typename TInteract, typename TIntegrate, typename TOut>
-void run(std::vector<TNode> &p_arr, TInteract interact_all,
-         TIntegrate integrate_all, TOut out, int n_step) {
-  for (int i = 1; i <= n_step; i++) {
-    interact_all(p_arr);
-
-    integrate_all(p_arr);
-
-    out(i, p_arr);
+template <typename TNode, typename UniFunc>
+void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
+  const auto end = p_arr.end();
+  for (auto it = p_arr.begin(); it != end; ++it) {
+    int ic_old = cl.get_ic(*it);
+    f_move(*it);
+    int ic_new = cl.get_ic(*it);
+    if (ic_old != ic_new) {
+      cl.update(*it, ic_old, ic_new);
+    }
   }
+  comm.comm_after_integration(p_arr, cl);
 }
 
-void run_test(int gl_par_num, const Vec_2<double>&gl_l, double eta,
-              unsigned long long seed, int n_step, const char* file_in = nullptr);
+void run(int gl_par_num, const Vec_2<double>&gl_l, double eta,
+         unsigned long long seed, int n_step, const char* file_in = nullptr);

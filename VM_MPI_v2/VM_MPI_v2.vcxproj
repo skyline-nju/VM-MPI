@@ -31,7 +31,6 @@
     <ClInclude Include="particle2D.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="domain2D.cpp" />
     <ClCompile Include="exporter2D.cpp" />
     <ClCompile Include="exporter2D_b.cpp" />
     <ClCompile Include="exporter2D_nc.cpp" />
@@ -139,6 +138,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(COMMON_DIR);$(I_MPI_ROOT)\intel64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

@@ -1,5 +1,6 @@
 #pragma once
-
+#include "config.h"
+#ifdef USE_NC
 #include "exporter2D.h"
 #include "mpi.h"
 #include "netcdf.h"
@@ -190,3 +191,5 @@ int NCFieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   }
   return 0;
 }
+
+#endif

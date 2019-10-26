@@ -40,8 +40,8 @@ void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max) {
 #endif
 }
 
-void run_test(int gl_par_num, const Vec_2<double>& gl_l, double eta,
-              unsigned long long seed, int n_step, const char* file_in) {
+void run(int gl_par_num, const Vec_2<double>& gl_l, double eta,
+         unsigned long long seed, int n_step, const char* file_in) {
   typedef BiNode<Bird_2> node_t;
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
