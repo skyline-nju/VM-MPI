@@ -103,5 +103,6 @@ void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_
   comm.comm_after_integration(p_arr, cl);
 }
 
-void run(int gl_par_num, const Vec_2<double>&gl_l, double eta,
-         unsigned long long seed, int n_step, const char* file_in = nullptr);
+
+void run_mult_bands(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
+                    unsigned long long seed, int n_step);

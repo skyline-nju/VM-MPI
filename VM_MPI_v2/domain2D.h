@@ -15,8 +15,8 @@ inline Vec_2<int> get_proc_rank(const Vec_2<int>& proc_size) {
   return Vec_2<int>();
 #endif
 }
-
-/**
+ 
+/*
  * @brief Simulation domain in 2D
  * 
  * The simulation domain is usually a rectangular area, whose length in x and y
@@ -70,8 +70,10 @@ void Domain_2::find_neighbor(T (*neighbor)[2]) const {
 }
 
 /**
- * @brief Domain with periodic boundary condition
+ * @brief Domain with periodic boundary condition in two dimension.
  * 
+ * Use flag_PBC_ to indicate whether the periodic bondary condition is applied
+ * along x and y direction.
  */
 class PeriodicDomain_2 : public Domain_2 {
 public:
@@ -108,8 +110,10 @@ inline void PeriodicDomain_2::untangle(Vec_2<double>& v) const {
 /**
  * @brief The simulation domain is divided into grids.
  * 
- * The mesh size of the grids is equal to or slightly larger than the cutoff radius
- * of interactions between particles.
+ * The mesh size of the grids should be equal to or slightly larger than the
+ * cutoff radius of interactions between particles. The grids described by
+ * this class are real grids, while the grids in celllist class may contain
+ * ghost grids.
  * 
  */
 class Grid_2 {
@@ -139,6 +143,7 @@ Grid_2::Grid_2(const TDomain& dm, double r_cut) {
   lc_.y = dm.gl_l().y / gl_n_.y;
 
   Vec_2<int> n_per_proc(gl_n_.x / dm.proc_size().x, gl_n_.y / dm.proc_size().y);
+  origin_ = n_per_proc * dm.proc_rank();
 
   if (dm.proc_rank().x == dm.proc_size().x - 1) {
     n_.x = gl_n_.x - dm.proc_rank().x * n_per_proc.x;
@@ -162,8 +167,15 @@ Grid_2::Grid_2(const TDomain& dm, double r_cut) {
 #endif
 }
 
+/**
+ * @brief Decompose the simulation domain into several subdomains.
+ * 
+ * @tparam T       default is double
+ * @param gl_l     length of the whole domain
+ * @return const Vec_2<int>  sizes of subdomain in x and y direction
+ */
 template <typename T>
-const Vec_2<int> decompose_domain(const Vec_2<double>& gl_l) {
+const Vec_2<int> decompose_domain(const Vec_2<T>& gl_l) {
   Vec_2<int> proc_size{};
   int tot_proc, my_proc;
 #ifdef USE_MPI

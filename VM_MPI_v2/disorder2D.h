@@ -47,6 +47,8 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Vec_2<double
     gl_theta = new double[gl_n_tot];
     set_random_torque(gl_theta, gl_n_tot, epsilon, myran);
   }
+  //! assuming the size of each subdomain is equal
+  //TODO implement the case each subdomain has different size
   MPI_Scatter(gl_theta, n_tot, MPI_DOUBLE, torque_,
               n_tot, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   delete[] gl_theta;

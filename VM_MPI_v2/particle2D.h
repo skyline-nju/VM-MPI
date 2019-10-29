@@ -3,6 +3,9 @@
 #include "domain2D.h"
 #include "config.h"
 #include "disorder2D.h"
+#ifdef USE_MPI
+#include "mpi.h"
+#endif
 
 class Bird_2 {
 public:
@@ -102,3 +105,45 @@ void move_forward(Par& p, double v0, double dtheta, const TDomain& domain) {
   move_forward(p, v0, dtheta);
   domain.tangle(p.pos);
 }
+
+
+template <typename TPar>
+void get_vel_sum(double* vel_sum, const std::vector<TPar>& p_arr) {
+  vel_sum[0] = vel_sum[1] = 0.;
+  auto end = p_arr.cend();
+  for (auto it = p_arr.cbegin(); it != end; ++it) {
+#ifdef POLAR_ALIGN
+    vel_sum[0] += (*it).ori.x;
+    vel_sum[1] += (*it).ori.y;
+#else
+    vel_sum[0] += (*it).ori.x * (*it).ori.x - (*it).ori.y * (*it).ori.y;
+    vel_sum[1] += 2 * (*it).ori.x * (*it).ori.y;
+#endif
+  }
+}
+
+template <typename TPar>
+void get_vel_mean(double* vel_mean, const std::vector<TPar>& p_arr) {
+  get_vel_sum(vel_mean, p_arr);
+  vel_mean[0] /= p_arr.size();
+  vel_mean[1] /= p_arr.size();
+}
+
+#ifdef USE_MPI
+template <typename TPar>
+void get_mean_vel(double* vel_mean, const std::vector<TPar>& p_arr,
+                  int gl_np, bool flag_broadcast) {
+  get_vel_sum(vel_mean, p_arr);
+  double gl_vel_sum[2];
+  MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
+    vel_mean[0] = gl_vel_sum[0] / gl_np;
+    vel_mean[1] = gl_vel_sum[1] / gl_np;
+  }
+  if (flag_broadcast) {
+    MPI_Bcast(vel_mean, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+}
+#endif

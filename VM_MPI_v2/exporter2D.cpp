@@ -1,129 +1,113 @@
 #include "exporter2D.h"
 
-Vec_2<double> gl_l;
-Vec_2<int> domain_sizes;
-double rho0;
-int gl_n_par;
-double eta;
-double eps;
-int n_step;
-int my_proc;
-int tot_proc;
-unsigned long long seed;
-std::string folder;
-std::string base_name;
-
-void create_output_folder(const std::string &fd) {
-  if (my_proc == 0) {
-    mkdir(fd);
+void exporter::ExporterBase::set_lin_frame(int start, int n_step, int sep) {
+  n_step_ = n_step;
+  for (auto i = start + sep; i <= n_step_; i += sep) {
+    frames_arr_.push_back(i);
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  frame_iter_ = frames_arr_.begin();
 }
 
-std::string set_base_name() {
-  char str[100];
-#ifdef DISORDER_ON
-  if (gl_l.x == gl_l.y) {
-    snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
-  } else {
-    snprintf(str, 100, "%g_%g_%.2f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, eps, rho0, seed);
+bool exporter::ExporterBase::need_export(int i_step) {
+  bool flag = false;
+  if (!frames_arr_.empty() && i_step == (*frame_iter_)) {
+    frame_iter_++;
+    flag = true;
   }
+  return flag;
+}
+
+exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_step, int sep, int np)
+  : ExporterBase(start, n_step, sep), n_par_(np) {
+#ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
+#endif
+    fout.open(outfile);
+    t_start_ = std::chrono::system_clock::now();
+    auto start_time = std::chrono::system_clock::to_time_t(t_start_);
+    char str[100];
+    std::strftime(str, 100, "%c", std::localtime(&start_time));
+    fout << "Started simulation at " << str << "\n";
+#ifdef USE_MPI
+  }
+#endif
+}
+
+exporter::LogExporter::~LogExporter() {
+#ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
+#endif
+    const auto t_now = std::chrono::system_clock::now();
+    auto end_time = std::chrono::system_clock::to_time_t(t_now);
+    char str[100];
+    // ReSharper disable CppDeprecatedEntity
+    std::strftime(str, 100, "%c", std::localtime(&end_time));
+    // ReSharper restore CppDeprecatedEntity
+    fout << "Finished simulation at " << str << "\n";
+    std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
+    fout << "speed=" << std::scientific << n_step_ * double(n_par_) / elapsed_seconds.count()
+      << " particle time step per second per core\n";
+    fout.close();
+#ifdef USE_MPI
+  }
+#endif
+}
+
+void exporter::LogExporter::record(int i_step) {
+  bool flag;
+#ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  flag = my_rank == 0 && need_export(i_step);
 #else
-  if (gl_l.x == gl_l.y) {
-    snprintf(str, 100, "%g_%.2f_%.1f_%llu", gl_l.x, eta, rho0, seed);
-  } else {
-    snprintf(str, 100, "%g_%g_%.2f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho0, seed);
+  flag = need_export(i_step);
+#endif
+  if (flag) {
+    const auto t_now = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
+    const auto dt = elapsed_seconds.count();
+    const auto hour = int(dt / 3600);
+    const auto min = int((dt - hour * 3600) / 60);
+    const int sec = dt - hour * 3600 - min * 60;
+    fout << i_step << "\t" << hour << ":" << min << ":" << sec << std::endl;
+  }
+}
+
+exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep)
+  : ExporterBase(start, n_step, sep) {
+#ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
+#endif
+    fout_.open(outfile);
+#ifdef USE_MPI
   }
 #endif
-  return std::string(str);
+
 }
 
-
-void exporter_ini(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
-                const Vec_2<double> &gl_l0, const Vec_2<int> &domain_sizes0) {
-  gl_n_par = gl_np;
-  eta = eta0;
-  eps = eps0;
-  n_step = steps;
-  seed = sd;
-  gl_l = gl_l0;
-  domain_sizes = domain_sizes0;
-  rho0 = gl_np / (gl_l.x * gl_l.y);
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
-
-  folder = "data" + delimiter;
-  create_output_folder(folder);
-  base_name = set_base_name();
-
-  //set_multi_nodes();
-}
-
-int get_start_particle_num(int particle_num) {
-  int *particle_count_arr = new int[tot_proc];
-  MPI_Gather(&particle_num, 1, MPI_INT, particle_count_arr, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  int particle_start_num;
-  int *particle_start_arr = new int[tot_proc];
-  if (my_proc == 0) {
-    particle_start_arr[0] = 0;
-    for (int i = 1; i < tot_proc; i++) {
-      particle_start_arr[i] = particle_start_arr[i - 1] + particle_count_arr[i - 1];
-    }
-  }
-  MPI_Scatter(particle_start_arr, 1, MPI_INT, &particle_start_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  delete[] particle_count_arr;
-  delete[] particle_start_arr;
-  return particle_start_num;
-}
-
-LogExporter::LogExporter(int interval)
-  : BaseLogExporter(folder + base_name + ".log", gl_n_par / tot_proc, n_step, interval) {
-  fout_ << "\n-------- Parameters --------";
-  fout_ << "\nParticle number=" << gl_n_par;
-  fout_ << "\nPacking fraction=" << rho0;
-  fout_ << "\ndomain lengths=" << gl_l;
-  fout_ << "\nblock sizes=" << domain_sizes;
-  fout_ << "\nn_step=" << n_step;
-  fout_ << "\nseed=" << seed;
-
-#ifdef SCALAR_NOISE
-  fout_ << "\nscalar noise";
-#else
-  fout_ << "\nvectorial noise";
+exporter::OrderParaExporter_2::~OrderParaExporter_2() {
+#ifdef USE_MPI
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  if (my_rank == 0) {
 #endif
-  fout_ << " = " << eta;
-
-#ifdef DISORDER_ON
-#ifdef RANDOM_TORQUE
-  fout_ << "random torque";
-#elif RANDOM_FIELD
-  fout_ << "random filed";
-#else
-  fout_ << "random stress";
-#endif
-  fout_ << "  = " << eps;
-#endif
-#ifdef POLAR_ALIGN
-  fout_ << "\npolar alignment";
-#else
-  fout_ << "\nnematic alignment";
-#endif
-  fout_ << "\n\n-------- RUN --------";
-  fout_ << "\ntime step\telapsed time" << std::endl;
-}
-
-OrderParaExporter::OrderParaExporter(int interval)
-  : BaseExporter(n_step, interval) {
-  if (my_proc == 0) {
-    fout_.open(folder + "phi_" + base_name + ".dat");
-  }
-  gl_np_ = gl_n_par;
-  my_proc_ = my_proc;
-}
-
-OrderParaExporter::~OrderParaExporter() {
-  if (my_proc_ == 0) {
     fout_.close();
+#ifdef USE_MPI
   }
+#endif
 }
 
+exporter::RhoxExporter::~RhoxExporter() {
+  delete[] buf_;
+#ifdef USE_MPI
+  MPI_File_close(&fh_);
+#else
+  fout_.close();
+#endif
+}
