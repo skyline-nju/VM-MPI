@@ -25,14 +25,12 @@
     <ClInclude Include="disorder2D.h" />
     <ClInclude Include="domain2D.h" />
     <ClInclude Include="exporter2D.h" />
-    <ClInclude Include="exporter2D_b.h" />
     <ClInclude Include="exporter2D_nc.h" />
-    <ClInclude Include="run2D.h" />
     <ClInclude Include="particle2D.h" />
+    <ClInclude Include="run2D.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="exporter2D.cpp" />
-    <ClCompile Include="exporter2D_b.cpp" />
     <ClCompile Include="exporter2D_nc.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="run2D.cpp" />

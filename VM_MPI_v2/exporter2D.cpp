@@ -17,11 +17,11 @@ bool exporter::ExporterBase::need_export(int i_step) {
   return flag;
 }
 
-exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_step, int sep, int np)
-  : ExporterBase(start, n_step, sep), n_par_(np) {
+exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_step, int sep, int np, MPI_Comm group_comm)
+  : ExporterBase(start, n_step, sep), n_par_(np), comm_(group_comm) {
 #ifdef USE_MPI
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(comm_, &my_rank);
   if (my_rank == 0) {
 #endif
     fout.open(outfile);
@@ -38,7 +38,7 @@ exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_
 exporter::LogExporter::~LogExporter() {
 #ifdef USE_MPI
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(comm_, &my_rank);
   if (my_rank == 0) {
 #endif
     const auto t_now = std::chrono::system_clock::now();
@@ -49,7 +49,7 @@ exporter::LogExporter::~LogExporter() {
     // ReSharper restore CppDeprecatedEntity
     fout << "Finished simulation at " << str << "\n";
     std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
-    fout << "speed=" << std::scientific << n_step_ * double(n_par_) / elapsed_seconds.count()
+    fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count()
       << " particle time step per second per core\n";
     fout.close();
 #ifdef USE_MPI
@@ -61,7 +61,7 @@ void exporter::LogExporter::record(int i_step) {
   bool flag;
 #ifdef USE_MPI
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(comm_, &my_rank);
   flag = my_rank == 0 && need_export(i_step);
 #else
   flag = need_export(i_step);
@@ -75,13 +75,14 @@ void exporter::LogExporter::record(int i_step) {
     const int sec = dt - hour * 3600 - min * 60;
     fout << i_step << "\t" << hour << ":" << min << ":" << sec << std::endl;
   }
+  step_count_++;
 }
 
-exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep)
-  : ExporterBase(start, n_step, sep) {
+exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, MPI_Comm group_comm)
+  : ExporterBase(start, n_step, sep), comm_(group_comm) {
 #ifdef USE_MPI
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(comm_, &my_rank);
   if (my_rank == 0) {
 #endif
     fout_.open(outfile);
@@ -94,7 +95,7 @@ exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, i
 exporter::OrderParaExporter_2::~OrderParaExporter_2() {
 #ifdef USE_MPI
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(comm_, &my_rank);
   if (my_rank == 0) {
 #endif
     fout_.close();

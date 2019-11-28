@@ -15,6 +15,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <iomanip>
 #include "config.h"
 #include "particle2D.h"
 
@@ -64,7 +65,7 @@ private:
  */
 class LogExporter : public ExporterBase {
 public:
-  LogExporter(const std::string& outfile, int start, int n_step, int sep, int np);
+  LogExporter(const std::string& outfile, int start, int n_step, int sep, int np, MPI_Comm group_comm);
 
   ~LogExporter();
 
@@ -74,6 +75,8 @@ public:
 private:
   std::chrono::time_point<std::chrono::system_clock> t_start_;
   int n_par_;
+  MPI_Comm comm_;
+  int step_count_ = 0;
 };
 
 /**
@@ -81,7 +84,7 @@ private:
  */
 class OrderParaExporter_2 : public ExporterBase {
 public:
-  OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep);
+  OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, MPI_Comm group_comm);
 
   ~OrderParaExporter_2();
 
@@ -89,7 +92,7 @@ public:
   void dump(int i_step, const std::vector<TPar>& p_arr, int gl_np);
 private:
   std::ofstream fout_;
-
+  MPI_Comm comm_;
 };
 
 template<typename TPar>
@@ -97,11 +100,11 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
   if (need_export(i_step)) {
     Vec_2<double> gl_vm;
 #ifdef USE_MPI
-    get_mean_vel(&gl_vm.x, p_arr, gl_np, false);
+    get_mean_vel(&gl_vm.x, p_arr, gl_np, false, comm_);
     int my_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    MPI_Comm_rank(comm_, &my_rank);
     if (my_rank == 0) {
-      fout_ << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
+      fout_ << std::fixed << std::setw(16) << std::setprecision(10) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
     }
 #else
     get_mean_vel(&gl_vm.x, p_arr);
@@ -118,8 +121,8 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
  */
 class SnapExporter : public ExporterBase {
 public:
-  explicit SnapExporter(const std::string outfile, int start, int n_step, int sep)
-    : ExporterBase(start, n_step, sep), file_prefix_(outfile) {}
+  explicit SnapExporter(const std::string outfile, int start, int n_step, int sep, MPI_Comm group_comm)
+    : ExporterBase(start, n_step, sep), file_prefix_(outfile), comm_(group_comm) {}
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar>& p_arr);
@@ -129,6 +132,7 @@ private:
   std::string file_prefix_;
 #ifdef USE_MPI
   MPI_File fh_{};
+  MPI_Comm comm_;
 #else
   ofsteam fout_;
 #endif
@@ -142,23 +146,23 @@ void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     count_++;
     int my_n = p_arr.size();
 #ifdef USE_MPI
-    MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE,
+    MPI_File_open(comm_, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE,
                   MPI_INFO_NULL, &fh_);
     int my_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    MPI_Comm_rank(comm_, &my_rank);
     int tot_proc;
-    MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+    MPI_Comm_size(comm_, &tot_proc);
     int my_origin;
     int* origin_arr = new int[tot_proc];
     int* n_arr = new int[tot_proc];
-    MPI_Gather(&my_n, 1, MPI_INT, n_arr, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(&my_n, 1, MPI_INT, n_arr, 1, MPI_INT, 0, comm_);
     if (my_rank == 0) {
       origin_arr[0] = 0;
       for (int i = 1; i < tot_proc; i++) {
         origin_arr[i] = origin_arr[i - 1] + n_arr[i - 1];
       }
     }
-    MPI_Scatter(origin_arr, 1, MPI_INT, &my_origin, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatter(origin_arr, 1, MPI_INT, &my_origin, 1, MPI_INT, 0, comm_);
     delete[] n_arr;
     delete[] origin_arr;
 
@@ -223,10 +227,10 @@ RhoxExporter::RhoxExporter(const std::string& outfile, int start, int n_step, in
   buf_ = new float[buf_size_];
   bin_area_ = dm.gl_l().y;
 #ifdef USE_MPI
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc_);
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank_);
+  MPI_Comm_size(dm.comm(), &tot_proc_);
+  MPI_Comm_rank(dm.comm(), &my_rank_);
   offset_ = grid.origin().x * sizeof(float);
-  MPI_File_open(MPI_COMM_WORLD, outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE,
+  MPI_File_open(dm.comm(), outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE,
     MPI_INFO_NULL, &fh_);
 #else
     fout_.open(outfile.c_str(), std::ios::binary);

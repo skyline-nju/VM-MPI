@@ -31,5 +31,37 @@ int main(int argc, char* argv[]) {
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x *gl_l.y * rho0);
 
-  run_mult_bands(gl_par_num, gl_l, eta, eps, seed, n_step);
+  int snap_interval = 200000;
+  if (argc == 7) {
+    run_rand_torque(gl_par_num, gl_l, eta, eps, seed, n_step, snap_interval, MPI_COMM_WORLD);
+  } else if (argc == 8) {
+    int cores_per_group = atoi(argv[7]);
+    int tot_proc;
+    MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+    int n_group = tot_proc / cores_per_group;
+    MPI_Group group, gl_group, root_group;
+    MPI_Comm group_comm, root_comm;
+
+    int* ranks = new int[cores_per_group];  // rank of processer belong to the same group
+    int* root_ranks = new int[n_group];     // rank of root processer of each group
+    int my_group = my_rank / cores_per_group;
+    for (int i = 0; i < cores_per_group; i++) {
+      ranks[i] = i + my_group * cores_per_group;
+    }
+    for (int i = 0; i < n_group; i++) {
+      root_ranks[i] = i * cores_per_group;
+    }
+
+    MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
+    MPI_Group_incl(gl_group, cores_per_group, ranks, &group);
+    MPI_Group_incl(gl_group, n_group, root_ranks, &root_group);
+    MPI_Comm_create(MPI_COMM_WORLD, group, &group_comm);
+    MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
+    unsigned long long my_seed = seed + static_cast<unsigned long long>(my_group) * static_cast<unsigned long long>(cores_per_group);
+    run_rand_torque(gl_par_num, gl_l, eta, eps, my_seed, n_step, snap_interval, group_comm, root_comm);
+    delete[] ranks;
+    delete[] root_ranks;
+  }
+
+  MPI_Finalize();
 }

@@ -173,6 +173,7 @@ private:
   int max_buf_size_ = 0;
 
   std::vector<int> vacant_pos_;
+  MPI_Comm comm_;
 };
 
 template <typename T>
@@ -227,7 +228,7 @@ void Communicator_2::set_comm_shell(const Vec_2<T>& cells_size) {
 
 template<class TDomain>
 Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplification):
-                               flag_comm_(dm.flag_comm()) {
+                               flag_comm_(dm.flag_comm()), comm_(dm.comm()) {
   my_rank_ = dm.rank().x + dm.rank().y * dm.size().x;
   tot_proc_ = dm.size().x * dm.size().y;
 
@@ -244,7 +245,7 @@ Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplificat
 
 template <class TDomain, class TGrid>
 Communicator_2::Communicator_2(const TDomain& dm, const TGrid& grid, double rho0, double amplification):
-                              flag_comm_(dm.proc_size().x > 1, dm.proc_size().y > 1) {
+                              flag_comm_(dm.proc_size().x > 1, dm.proc_size().y > 1), comm_(dm.comm()) {
   my_rank_ = dm.proc_rank().x + dm.proc_rank().y * dm.proc_size().x;
   tot_proc_ = dm.proc_size().x * dm.proc_size().y;
 
@@ -269,13 +270,13 @@ void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw,
   }
 
   //! transfer data backward
-  MPI_Irecv(buf_[0], buf_size_[0], MPI_DOUBLE, next_proc, tag_bw, MPI_COMM_WORLD, &req[0]);
+  MPI_Irecv(buf_[0], buf_size_[0], MPI_DOUBLE, next_proc, tag_bw, comm_, &req[0]);
   pack(buf_[1], buf_size_[1], prev_block);
-  MPI_Isend(buf_[1], buf_size_[1], MPI_DOUBLE, prev_proc, tag_bw, MPI_COMM_WORLD, &req[1]);
+  MPI_Isend(buf_[1], buf_size_[1], MPI_DOUBLE, prev_proc, tag_bw, comm_, &req[1]);
   //! transfer data forward
-  MPI_Irecv(buf_[2], buf_size_[2], MPI_DOUBLE, prev_proc, tag_fw, MPI_COMM_WORLD, &req[2]);
+  MPI_Irecv(buf_[2], buf_size_[2], MPI_DOUBLE, prev_proc, tag_fw, comm_, &req[2]);
   pack(buf_[3], buf_size_[3], next_block);
-  MPI_Isend(buf_[3], buf_size_[3], MPI_DOUBLE, next_proc, tag_fw, MPI_COMM_WORLD, &req[3]);
+  MPI_Isend(buf_[3], buf_size_[3], MPI_DOUBLE, next_proc, tag_fw, comm_, &req[3]);
 
   //! do something while waiting
   do_sth();

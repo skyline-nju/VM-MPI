@@ -18,9 +18,6 @@
     <ClInclude Include="cellList2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="particle2D.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="communicator2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -42,7 +39,7 @@
     <ClInclude Include="exporter2D_nc.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="exporter2D_b.h">
+    <ClInclude Include="particle2D.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -57,9 +54,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="exporter2D_nc.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="exporter2D_b.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

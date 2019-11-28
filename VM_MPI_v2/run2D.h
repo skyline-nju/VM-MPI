@@ -9,15 +9,15 @@
 #include "disorder2D.h"
 #endif
 
-int ini_my_par_num(int gl_par_num);
+int ini_my_par_num(int gl_par_num, MPI_Comm group_comm);
 
-void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max);
+void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_Comm group_comm);
 
 template <typename TNode, typename TRan, typename TDomain>
 void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
               CellListNode_2<TNode>& cl, TDomain &dm) {
   int my_par_num, n_max;
-  set_particle_num(gl_par_num, my_par_num, n_max);
+  set_particle_num(gl_par_num, my_par_num, n_max, dm.comm());
   p_arr.reserve(n_max);
   for (int i = 0; i < my_par_num; i++) {
     p_arr.emplace_back(myran, dm.l(), dm.origin());
@@ -30,10 +30,10 @@ void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
                    CellListNode_2<TNode>& cl,
                    TDomain &dm, const char* filename) {
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(dm.comm(), &my_rank);
 
   int my_par_num, n_max;
-  set_particle_num(gl_par_num, my_par_num, n_max);
+  set_particle_num(gl_par_num, my_par_num, n_max, dm.comm());
 
   std::string basename = split(filename, "/").back();
   std::vector<std::string> str_arr = split(basename, "_");
@@ -105,4 +105,8 @@ void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_
 
 
 void run_mult_bands(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
-                    unsigned long long seed, int n_step);
+                    unsigned long long seed, int n_step, MPI_Comm group_comm);
+
+void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
+                     unsigned long long seed, int n_step, int snap_interval,
+                     MPI_Comm group_comm, MPI_Comm root_comm=MPI_COMM_WORLD);

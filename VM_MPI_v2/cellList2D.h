@@ -99,7 +99,7 @@ CellListBase_2::CellListBase_2(const TDomain& dm, const TGrid& grid, int pad_w)
   }
   n_cells_ = n_.x * n_.y;
 
-  std::cout << "Success to create cell list with size " << n_ << std::endl;
+  //std::cout << "Success to create cell list with size " << n_ << std::endl;
 }
 
 template <typename T>

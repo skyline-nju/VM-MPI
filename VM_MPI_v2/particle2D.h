@@ -132,18 +132,18 @@ void get_vel_mean(double* vel_mean, const std::vector<TPar>& p_arr) {
 #ifdef USE_MPI
 template <typename TPar>
 void get_mean_vel(double* vel_mean, const std::vector<TPar>& p_arr,
-                  int gl_np, bool flag_broadcast) {
+                  int gl_np, bool flag_broadcast, MPI_Comm group_comm) {
   get_vel_sum(vel_mean, p_arr);
   double gl_vel_sum[2];
-  MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm, &my_rank);
   if (my_rank == 0) {
     vel_mean[0] = gl_vel_sum[0] / gl_np;
     vel_mean[1] = gl_vel_sum[1] / gl_np;
   }
   if (flag_broadcast) {
-    MPI_Bcast(vel_mean, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(vel_mean, 2, MPI_DOUBLE, 0, group_comm);
   }
 }
 #endif
