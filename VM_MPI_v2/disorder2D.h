@@ -10,7 +10,11 @@
 
 template <typename TRan>
 void set_random_torque(double* theta, int n, double epsilon, TRan& myran) {
-  const double d = 1.0 / (n - 1);
+#ifdef RANDOM_TORQUE
+    const double d = 1.0 / (n - 1);
+#elif defined RANDOM_FIELD
+    const double d = 1.0 / n;
+#endif
   for (int i = 0; i < n; i++) {
     theta[i] = (-0.5 + i * d) * 2.0 * PI * epsilon;
   }
@@ -28,9 +32,13 @@ public:
 
   ~RandTorque_2() { delete[] torque_; }
 
-  template <typename Par>
-  double get_torque(const Par& p);
+  template <typename TPar>
+  double get_torque(const TPar& p) const {
+    const Vec_2<double> r = p.pos - origin_;
+    return torque_[int(r.x) + int(r.y) * nx_];
+  }
 
+  double get_torque(int idx) const { return torque_[idx]; }
 private:
   double* torque_;
   Vec_2<double> origin_;  // origin of the (sub)domain
@@ -134,8 +142,53 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
 #endif
 }
 
-template <typename Par>
-double RandTorque_2::get_torque(const Par& p) {
-  const Vec_2<double> r = p.pos - origin_;
-  return torque_[int(r.x) + int(r.y) * nx_];
+class RandField_2 {
+public:
+  template <typename TRan>
+  RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Comm group_comm);
+
+  ~RandField_2() { delete[] field_; }
+
+  template <typename TPar>
+  const Vec_2<double>& get_field(const TPar& p) const {
+    const Vec_2<double> r = p.pos - origin_;
+    return field_[int(r.x) + int(r.y) * nx_];
+  }
+
+  template <typename TPar>
+  void apply_field(TPar& p) const {
+    const Vec_2<double> r = p.pos - origin_;
+    const int idx = int(r.x) + int(r.y) * nx_;
+    p.ori_next.x += p.n_neighb * field_[idx].x;
+    p.ori_next.y += p.n_neighb * field_[idx].y;
+  }
+private:
+  Vec_2<double>* field_;
+  Vec_2<double> origin_;  // origin of the (sub)domain
+  int nx_; // number of columns in x direction
+};
+
+template<typename TRan>
+RandField_2::RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Comm group_comm)
+  : origin_(grid.lc()* grid.origin()), nx_(grid.n().x) {
+  const int n_grids = nx_ * grid.n().y;
+  field_ = new Vec_2<double>[n_grids];
+  RandTorque_2 rand_torque(1., myran, grid, group_comm);
+  double v_sum[2];
+  v_sum[0] = v_sum[1] = 0.;
+  for (int i = 0; i < n_grids; i++) {
+    double theta = rand_torque.get_torque(i);
+    field_[i].x = epsilon * cos(theta);
+    field_[i].y = epsilon * sin(theta);
+    v_sum[0] += field_[i].x;
+    v_sum[1] += field_[i].y;
+  }
+
+  double v_sum_gl[2];
+  MPI_Reduce(v_sum, v_sum_gl, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);
+  int my_proc;
+  MPI_Comm_rank(group_comm, &my_proc);
+  if (my_proc == 0) {
+    std::cout << "sum of random fields: " << v_sum_gl[0] << "\t" << v_sum_gl[1] << std::endl;
+  }
 }

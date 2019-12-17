@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
 
   int snap_interval = 200000;
   if (argc == 7) {
-    run_rand_torque(gl_par_num, gl_l, eta, eps, seed, n_step, snap_interval, MPI_COMM_WORLD);
+    run_quenched(gl_par_num, gl_l, eta, eps, seed, n_step, snap_interval, MPI_COMM_WORLD);
   } else if (argc == 8) {
     int cores_per_group = atoi(argv[7]);
     int tot_proc;
@@ -57,8 +57,8 @@ int main(int argc, char* argv[]) {
     MPI_Group_incl(gl_group, n_group, root_ranks, &root_group);
     MPI_Comm_create(MPI_COMM_WORLD, group, &group_comm);
     MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
-    unsigned long long my_seed = seed + static_cast<unsigned long long>(my_group) * static_cast<unsigned long long>(cores_per_group);
-    run_rand_torque(gl_par_num, gl_l, eta, eps, my_seed, n_step, snap_interval, group_comm, root_comm);
+    unsigned long long my_seed = seed + my_group;
+    run_quenched(gl_par_num, gl_l, eta, eps, my_seed, n_step, snap_interval, group_comm, root_comm);
     delete[] ranks;
     delete[] root_ranks;
   }

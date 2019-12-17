@@ -40,9 +40,9 @@ void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_
 #endif
 }
 
-void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
-                     unsigned long long seed, int n_step, int snap_interval,
-                     MPI_Comm group_comm, MPI_Comm root_comm) {
+void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
+                  unsigned long long seed, int n_step, int snap_interval,
+                  MPI_Comm group_comm, MPI_Comm root_comm) {
   typedef BiNode<Bird_2> node_t;
   int my_rank, tot_proc;
   MPI_Comm_rank(group_comm, &my_rank);
@@ -60,7 +60,11 @@ void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, doub
   Communicator_2 comm(dm, grid, rho_0, 20.);
 
   // initialize random torques
-  RandTorque_2 torque(eps, myran, grid, group_comm);
+#ifdef RANDOM_TORQUE
+  RandTorque_2 disorder(eps, myran, grid, group_comm);
+#elif defined RANDOM_FIELD
+  RandField_2 disorder(eps, myran, grid, group_comm);
+#endif
 
   // initialize the location and orientation of particles
   ini_rand(p_arr, gl_par_num, myran, cl, dm);
@@ -88,11 +92,14 @@ void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, doub
 
   // integrate
   double eta2PI = eta * 2.0 * PI;
-  auto single_move = [eta2PI, v0, &myran, &dm, &torque, eps](node_t& p) {
+  auto single_move = [eta2PI, v0, &myran, &dm, &disorder, eps](node_t& p) {
     double noise = (myran.doub() - 0.5) * eta2PI;
-    // random torque
     if (eps > 0.) {
-      noise += torque.get_torque(p);
+#ifdef RANDOM_TORQUE
+      noise += disorder.get_torque(p);
+#elif defined RANDOM_FIELD
+      disorder.apply_field(p);
+#endif
     }
     move_forward(p, v0, noise, dm);
   };
@@ -104,13 +111,21 @@ void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, doub
   char phifile[100];
   char snapfile[100];
 
+#ifdef RANDOM_TORQUE
   snprintf(logfile, 100, "data%s%d.%d.%d.%llu.log",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
   snprintf(phifile, 100, "data%sp%d.%d.%d.%llu.dat",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
   snprintf(snapfile, 100, "data/snap%ss%d.%d.%d.%llu",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
-
+#elif defined RANDOM_FIELD
+  snprintf(logfile, 100, "data%srf_%d_%g_%g_%llu.log",
+    exporter::delimiter.c_str(), int(gl_l.x), eta, eps, seed);
+  snprintf(phifile, 100, "data%sphi_rf_%d_%g_%g_%llu.dat",
+    exporter::delimiter.c_str(), int(gl_l.x), eta, eps, seed);
+  snprintf(snapfile, 100, "data/snap%ssrf_%d_%g_%g_%llu",
+    exporter::delimiter.c_str(), int(gl_l.x), eta, eps, seed);
+#endif
   exporter::LogExporter log(logfile, 0, n_step*2, 10000, gl_par_num, group_comm);
   exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step*2, 100, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step*2, snap_interval, group_comm);
@@ -167,6 +182,7 @@ void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, doub
         MPI_Bcast(&finished_group, 1, MPI_INT, 0, group_comm);
       }
     }
+    MPI_Barrier(MPI_COMM_WORLD);
   }
   
   std::cout << "finish" << std::endl;

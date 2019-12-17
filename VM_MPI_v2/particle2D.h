@@ -15,7 +15,6 @@ public:
   template <typename TRan>
   Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin);
 
-
   void copy_from(const Vec_2<double>& pos_new, const Vec_2<double>& ori_new);
 
   void copy_to(double* dest, int& idx) const;
@@ -26,6 +25,9 @@ public:
   Vec_2<double> ori;
   Vec_2<double> ori_next;
 
+#ifdef RANDOM_FIELD
+  int n_neighb = 1;
+#endif
 };
 
 template <typename TRan>
@@ -39,6 +41,9 @@ Bird_2::Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin)
 inline void Bird_2::copy_from(const Vec_2<double>& pos_new, const Vec_2<double>& ori_new) {
   pos = pos_new;
   ori = ori_next = ori_new;
+#ifdef RANDOM_FIELD
+  n_neighb = 1;
+#endif
 }
 
 inline void Bird_2::copy_to(double* dest, int& idx) const {
@@ -55,6 +60,10 @@ void polar_align(Par &p1, Par &p2, const Vec_2<double>& dR) {
   if (dR.square() < 1.) {
     p1.ori_next += p2.ori;
     p2.ori_next += p1.ori;
+#ifdef RANDOM_FIELD
+    p1.n_neighb++;
+    p2.n_neighb++;
+#endif
   }
 }
 
@@ -76,6 +85,10 @@ void nematic_align(Par& p1, Par& p2, const Vec_2<double>& dR) {
       p1.ori_next -= p2.ori;
       p2.ori_next -= p1.ori;
     }
+#ifdef RANDOM_FIELD
+    p1.n_neighb++;
+    p2.n_neighb++;
+#endif
   }
 }
 
@@ -98,6 +111,9 @@ void move_forward(Par& p, double v0, double dtheta) {
   p.ori.x = p.ori_next.x = c1 * c2 - s1 * s2;
   p.ori.y = p.ori_next.y = c1 * s2 + c2 * s1;
   p.pos += v0 * p.ori;
+#ifdef RANDOM_FIELD
+  p.n_neighb = 1;
+#endif
 }
 
 template <class Par, class TDomain>

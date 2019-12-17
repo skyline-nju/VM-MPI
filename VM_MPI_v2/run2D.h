@@ -5,9 +5,6 @@
 #include "exporter2D.h"
 #include <iomanip>
 #include "communicator2D.h"
-#ifdef RANDOM_TORQUE
-#include "disorder2D.h"
-#endif
 
 int ini_my_par_num(int gl_par_num, MPI_Comm group_comm);
 
@@ -107,6 +104,6 @@ void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_
 void run_mult_bands(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
                     unsigned long long seed, int n_step, MPI_Comm group_comm);
 
-void run_rand_torque(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
-                     unsigned long long seed, int n_step, int snap_interval,
-                     MPI_Comm group_comm, MPI_Comm root_comm=MPI_COMM_WORLD);
+void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
+                  unsigned long long seed, int n_step, int snap_interval,
+                  MPI_Comm group_comm, MPI_Comm root_comm=MPI_COMM_WORLD);
