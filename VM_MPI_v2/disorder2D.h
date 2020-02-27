@@ -107,6 +107,9 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
     std::cout << "sum of torque = " << sum << std::endl;
   }
 
+  //MPI_Scatter(gl_theta, n_grids, MPI_DOUBLE, torque_, n_grids, MPI_DOUBLE, 0, group_comm);
+  //MPI_Barrier(group_comm);
+
   int *n_grids_v = new int[tot_proc];
   int *displs = new int[tot_proc];
   for (int i = 0; i < tot_proc; i++) {
@@ -121,6 +124,9 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
   }
   MPI_Scatterv(gl_theta, n_grids_v, displs, MPI_DOUBLE, torque_, n_grids,
                MPI_DOUBLE, 0, group_comm);
+  delete[] n_grids_v;
+  delete[] displs;
+
 
   { // test
     double sum = 0;
@@ -134,8 +140,7 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
     }
   }
 
-  delete[] n_grids_v;
-  delete[] displs;
+
   delete[] gl_theta;
 #else
   set_random_torque(torque_, n_grids, epsilon, myran);

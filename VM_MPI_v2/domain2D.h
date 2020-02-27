@@ -170,13 +170,14 @@ Grid_2::Grid_2(TDomain& dm, double r_cut) {
   dm.adjust(lc_ * n_, lc_ * origin_);
 
 #ifdef USE_MPI
-  int* nx = new int[dm.proc_size().x];
-  int* ny = new int[dm.proc_size().y];
+  int* nx = new int[dm.proc_size().x * dm.proc_size().y];
+  int* ny = new int[dm.proc_size().x * dm.proc_size().y];
   MPI_Gather(&n_.x, 1, MPI_INT, nx, 1, MPI_INT, 0, dm.comm());
   MPI_Gather(&n_.y, 1, MPI_INT, ny, 1, MPI_INT, 0, dm.comm());
 
-
-  if (dm.proc_rank().x == 0 && dm.proc_rank().y == 0) {
+  int my_rank;
+  MPI_Comm_rank(dm.comm(), &my_rank);
+  if (my_rank == 0) {
     std::cout << "domain size: " << dm.gl_l().x << " * " << dm.gl_l().y << std::endl;
     std::cout << "proc size: " << dm.proc_size().x << " * " << dm.proc_size().y << std::endl;
     std::cout << "grid size in x direction:";

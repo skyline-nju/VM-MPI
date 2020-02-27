@@ -105,12 +105,19 @@ void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double 
   };
 
   // output setting
-  mkdir("data");
-  mkdir("data/snap");
+  if (my_rank == 0) {
+    mkdir("data");
+#ifdef _MSC_VER
+    mkdir("data\\snap");
+#else
+    mkdir("data/snap");
+#endif
+  }
+  MPI_Barrier(group_comm);
   char logfile[100];
   char phifile[100];
   char snapfile[100];
-
+ 
 #ifdef RANDOM_TORQUE
   snprintf(logfile, 100, "data%s%d.%d.%d.%llu.log",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
@@ -142,6 +149,7 @@ void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double 
     order_ex.dump(i, par_arr, gl_par_num);
     snap_ex.dump(i, par_arr);
   };
+
 
   if (root_comm == MPI_COMM_WORLD) {
     for (int i = 1; i <= n_step; i++) {

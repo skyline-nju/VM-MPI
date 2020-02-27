@@ -134,7 +134,7 @@ private:
   MPI_File fh_{};
   MPI_Comm comm_;
 #else
-  ofsteam fout_;
+  std::ofstream fout_;
 #endif
 };
 
