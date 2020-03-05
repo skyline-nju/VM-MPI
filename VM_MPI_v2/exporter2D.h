@@ -16,6 +16,7 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
+#include <map>
 #include "config.h"
 #include "particle2D.h"
 
@@ -84,15 +85,32 @@ private:
  */
 class OrderParaExporter_2 : public ExporterBase {
 public:
-  OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, MPI_Comm group_comm);
+  OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, 
+    const Vec_2<double>& gl_l, MPI_Comm group_comm);
 
   ~OrderParaExporter_2();
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar>& p_arr, int gl_np);
+
+  template <typename TPar>
+  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl, const std::vector<TPar>& p_arr) const;
+
+  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl, int& nx, int& ny) const;
+
+  double get_mean_phi(int size, const int* n_gl,
+    const double* svx_gl, const double* svy_gl, bool normed) const;
+
+  void cal_mean_phi(int size, const int* n_gl, const double* svx_gl, const double* svy_gl,
+    double& phi1, double& phi2);
+
 private:
   std::ofstream fout_;
   MPI_Comm comm_;
+
+  std::vector<int> L_arr_;
+  bool flag_phi_box_;
+  int max_cells_;
 };
 
 template<typename TPar>
@@ -101,16 +119,128 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
     Vec_2<double> gl_vm;
 #ifdef USE_MPI
     get_mean_vel(&gl_vm.x, p_arr, gl_np, false, comm_);
-    int my_rank;
+    int my_rank, tot_proc;
     MPI_Comm_rank(comm_, &my_rank);
-    if (my_rank == 0) {
-      fout_ << std::fixed << std::setw(16) << std::setprecision(10) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
+    MPI_Comm_size(comm_, &tot_proc);
+
+    if (flag_phi_box_) {
+      int* n_gl = nullptr;
+      double* svx_gl = nullptr;
+      double* svy_gl = nullptr;
+      coarse_grain(&n_gl, &svx_gl, &svy_gl, p_arr);
+      int nx = L_arr_.back() / L_arr_[0];
+      int ny = nx;
+
+      double phi1, phi2;
+      if (my_rank == 0) {
+        fout_ << std::fixed << std::setw(10) << std::setprecision(8) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << "\t";
+        cal_mean_phi(nx * ny, n_gl, svx_gl, svy_gl, phi1, phi2);
+        fout_ << phi1 << "\t" << phi2;
+        while (nx >= 2) {
+          coarse_grain(&n_gl, &svx_gl, &svy_gl, nx, ny);
+          cal_mean_phi(nx * ny, n_gl, svx_gl, svy_gl, phi1, phi2);
+          if (nx == 1) {
+            fout_ << "\t" << phi1;
+          } else {
+            fout_ << "\t" << phi1 << "\t" << phi2;
+          }
+        }
+        fout_ << std::endl;
+      }
+      delete[] n_gl;
+      delete[] svx_gl;
+      delete[] svy_gl;
+    } else {
+      if (my_rank == 0) {
+        fout_ << std::fixed << std::setw(16) << std::setprecision(10) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
+      }
     }
 #else
     get_mean_vel(&gl_vm.x, p_arr);
     fout_ << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
 #endif
   }
+}
+
+template<typename TPar>
+void OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy_gl,
+  const std::vector<TPar>& p_arr) const {
+  int my_rank, tot_proc;
+  MPI_Comm_rank(comm_, &my_rank);
+  MPI_Comm_size(comm_, &tot_proc);
+  //std::cout << "rank = " << my_rank  << "size = " << tot_proc << std::endl;
+
+  int* idx_arr = new int[max_cells_] {};
+  int* n_arr = new int[max_cells_] {};
+  double* svx_arr = new double[max_cells_] {};
+  double* svy_arr = new double[max_cells_] {};
+  int* idx_recv{};
+  int* n_recv{};
+  double* svx_recv{};
+  double* svy_recv{};
+
+  double inverse_l = 1. / L_arr_[0];
+  int nx = L_arr_.back() / L_arr_[0];
+
+  std::map<int, int> index_map;
+  for (const auto& p : p_arr) {
+    int idx = int(p.pos.x * inverse_l) + nx * int(p.pos.y * inverse_l);
+    auto search = index_map.find(idx);
+    int pos;
+    if (search != index_map.end()) {
+      pos = search->second;
+    } else {
+      pos = index_map.size();
+      index_map.emplace(idx, pos);
+    }
+    idx_arr[pos] = idx;
+    n_arr[pos] += 1;
+    svx_arr[pos] += p.ori.x;
+    svy_arr[pos] += p.ori.y;
+  }
+  int size = index_map.size();
+  int* size_arr = new int[tot_proc];
+  MPI_Gather(&size, 1, MPI_INT, size_arr, 1, MPI_INT, 0, comm_);
+  MPI_Bcast(size_arr, tot_proc, MPI_INT, 0, comm_);
+  int* displs = new int[tot_proc] {};
+  for (int i = 1; i < tot_proc; i++) {
+    displs[i] = displs[i - 1] + size_arr[i - 1];
+  }
+  int gl_size = displs[tot_proc - 1] + size_arr[tot_proc - 1];
+  if (my_rank == 0) {
+    idx_recv = new int[gl_size];
+    n_recv = new int[gl_size];
+    svx_recv = new double[gl_size];
+    svy_recv = new double[gl_size];
+  }
+
+  MPI_Gatherv(idx_arr, size, MPI_INT, idx_recv, size_arr, displs, MPI_INT, 0, comm_);
+  MPI_Gatherv(n_arr, size, MPI_INT, n_recv, size_arr, displs, MPI_INT, 0, comm_);
+  MPI_Gatherv(svx_arr, size, MPI_DOUBLE, svx_recv, size_arr, displs, MPI_DOUBLE, 0, comm_);
+  MPI_Gatherv(svy_arr, size, MPI_DOUBLE, svy_recv, size_arr, displs, MPI_DOUBLE, 0, comm_);
+  delete[] size_arr;
+  delete[] displs;
+  delete[] idx_arr;
+  delete[] n_arr;
+  delete[] svx_arr;
+  delete[] svy_arr;
+
+  if (my_rank == 0) {
+    *n_gl = new int[nx * nx]{};
+    *svx_gl = new double[nx * nx]{};
+    *svy_gl = new double[nx * nx]{};
+
+    for (int i = 0; i < gl_size; i++) {
+      int j = idx_recv[i];
+      (*n_gl)[j] += n_recv[i];
+      (*svx_gl)[j] += svx_recv[i];
+      (*svy_gl)[j] += svy_recv[i];
+    }
+  }
+  delete[] idx_recv;
+  delete[] n_recv;
+  delete[] svx_recv;
+  delete[] svy_recv;
 }
 
 /**

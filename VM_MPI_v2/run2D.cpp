@@ -120,11 +120,11 @@ void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double 
  
 #ifdef RANDOM_TORQUE
   snprintf(logfile, 100, "data%s%d.%d.%d.%llu.log",
-    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
+    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed);
   snprintf(phifile, 100, "data%sp%d.%d.%d.%llu.dat",
-    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
+    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed);
   snprintf(snapfile, 100, "data/snap%ss%d.%d.%d.%llu",
-    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 10000), seed);
+    exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed);
 #elif defined RANDOM_FIELD
   snprintf(logfile, 100, "data%srf_%d_%g_%g_%llu.log",
     exporter::delimiter.c_str(), int(gl_l.x), eta, eps, seed);
@@ -134,7 +134,7 @@ void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double 
     exporter::delimiter.c_str(), int(gl_l.x), eta, eps, seed);
 #endif
   exporter::LogExporter log(logfile, 0, n_step*2, 10000, gl_par_num, group_comm);
-  exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step*2, 100, group_comm);
+  exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step*2, 100, gl_l, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step*2, snap_interval, group_comm);
 
   if (my_rank == 0) {
@@ -274,7 +274,7 @@ void run_mult_bands(int gl_par_num, const Vec_2<double>& gl_l, double eta, doubl
     exporter::delimiter.c_str(), int(eta * 1000), int(eps * 10000), gl_l.x, gl_l.y, seed);
 
   exporter::LogExporter log(logfile, 0, n_step, 10000, gl_par_num, group_comm);
-  exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step, 100, group_comm);
+  exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step, 100, gl_l, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step, 200000, group_comm);
   exporter::RhoxExporter rhox_ex(rhoxfile, 0, n_step, 100, grid, dm);
 
