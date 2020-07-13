@@ -79,7 +79,7 @@ void exporter::LogExporter::record(int i_step) {
 }
 
 exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep,
-                                                   const Vec_2<double>& gl_l, MPI_Comm group_comm)
+                                                   const Vec_2<double>& gl_l, MPI_Comm group_comm, int use_sub_boxes)
   : ExporterBase(start, n_step, sep), comm_(group_comm) {
   int tot_proc = 1;
 #ifdef USE_MPI
@@ -92,7 +92,7 @@ exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, i
 #ifdef USE_MPI
   }
 #endif
-  if (gl_l.x == gl_l.y && (int(gl_l.x) % 32) == 0) {
+  if (use_sub_boxes && gl_l.x == gl_l.y && (int(gl_l.x) % 32) == 0) {
     flag_phi_box_ = true;
     for (int i = 32; i <= int(gl_l.x); i *= 2) {
       L_arr_.push_back(i);
@@ -202,4 +202,32 @@ exporter::RhoxExporter::~RhoxExporter() {
 #else
   fout_.close();
 #endif
+}
+
+
+exporter::FeildExporter::~FeildExporter() {
+  delete[] offset_;
+  MPI_File_close(&fh_);
+}
+
+void exporter::FeildExporter::write_data(const float* rho, const float* vx, const float* vy) {
+  const MPI_Offset frame_start = idx_frame_ * frame_size_;
+  MPI_Offset offset1, offset2, offset3;
+  int pos = 0;
+  for (int row = 0; row < n_.y; row++) {
+    offset1 = frame_start + offset_[row];
+    offset2 = frame_start + offset_[row + n_.y];
+    offset3 = frame_start + offset_[row + n_.y + n_.y];
+    MPI_File_write_at(fh_, offset1, &rho[pos], n_.x, MPI_FLOAT, MPI_STATUSES_IGNORE);
+    MPI_File_write_at(fh_, offset2, &vx[pos],  n_.x, MPI_FLOAT, MPI_STATUSES_IGNORE);
+    MPI_File_write_at(fh_, offset3, &vy[pos],  n_.x, MPI_FLOAT, MPI_STATUSES_IGNORE);
+    pos += n_.x;
+  }
+  idx_frame_++;
+}
+
+exporter::TimeAveFeildExporter::~TimeAveFeildExporter() {
+  delete[] sum_n_;
+  delete[] sum_vx_;
+  delete[] sum_vy_;
 }

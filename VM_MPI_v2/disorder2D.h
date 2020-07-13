@@ -140,7 +140,6 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
     }
   }
 
-
   delete[] gl_theta;
 #else
   set_random_torque(torque_, n_grids, epsilon, myran);

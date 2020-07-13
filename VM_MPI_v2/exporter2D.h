@@ -61,7 +61,7 @@ private:
  * @brief Exporter to output log
  * 
  * Output the parameters after the initialization.
- * Output the beginning and endding time of the simulation.
+ * Output the beginning and ending time of the simulation.
  * Record time every certain time steps.
  */
 class LogExporter : public ExporterBase {
@@ -82,11 +82,14 @@ private:
 
 /**
  * @brief Output order parameters.
+ *
+ * If set use_sub_boxes=1, then calculate local orderparameters over boxes with
+ * varies lienar size, otherwise just calcalute globa order parameters.
  */
 class OrderParaExporter_2 : public ExporterBase {
 public:
   OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, 
-    const Vec_2<double>& gl_l, MPI_Comm group_comm);
+    const Vec_2<double>& gl_l, MPI_Comm group_comm, int use_sub_boxes=0);
 
   ~OrderParaExporter_2();
 
@@ -318,6 +321,7 @@ void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   }
 }
 
+
 /**
  * @brief Output density profile averaged along y direction, rho_y(x)
  */
@@ -389,6 +393,162 @@ void RhoxExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     fout_.write(buf, sizeof(float) * buf_size_);
 #endif
     count_++;
+  }
+}
+
+/**
+ * @brief Exporter for coarse-grained density and momentum field in 2D.
+ *
+ * Output coarse-grained density and momentum field over boxes with linear
+ * size "box_size" every "sep" time steps.
+ * 
+ * Caution: the number of grids in both x and y directions must be multiple
+ * of linear size of boxes for coarse graining.
+ */
+class FeildExporter : public ExporterBase {
+public:
+  template <typename TDomain>
+  FeildExporter(const std::string& outfile, int start, int n_step, int sep,
+    const Grid_2& grid, const TDomain& dm, int box_size = 4);
+
+  template <typename TPar, typename T>
+  void coarse_grain(const std::vector<TPar>& p_arr, T* rho, T* vx, T* vy);
+
+  template <typename TPar>
+  void dump(int i_step, const std::vector<TPar>& p_arr);
+
+  void write_data(const float* rho, const float* vx, const float* vy);
+
+  ~FeildExporter();
+
+protected:
+  Vec_2<double> origin_;
+  Vec_2<int> gl_n_;
+  Vec_2<int> n_;
+  Vec_2<int> o_;
+  Vec_2<double> inv_lc_;
+
+  MPI_File fh_{};
+  MPI_Offset frame_size_;
+  int n_grids_;
+  MPI_Offset* offset_;
+  int idx_frame_;
+};
+
+template <typename TDomain>
+FeildExporter::FeildExporter(const std::string& outfile, int start, int n_step, int sep,
+                             const Grid_2& grid, const TDomain& dm, int box_size)
+  : ExporterBase(start, n_step, sep), origin_(dm.origin()) {
+  gl_n_.x = grid.gl_n().x / box_size;
+  gl_n_.y = grid.gl_n().y / box_size;
+  n_.x = grid.n().x / box_size;
+  n_.y = grid.n().y / box_size;
+  o_.x = grid.origin().x / box_size;
+  o_.y = grid.origin().y / box_size;
+  inv_lc_.x = 1. / box_size;
+  inv_lc_.y = 1. / box_size;
+  frame_size_ = gl_n_.x * gl_n_.y * sizeof(float) * 3;
+  n_grids_ = n_.x * n_.y;
+
+  offset_ = new MPI_Offset[n_.y * 3]{};
+
+  for (int i_field = 0; i_field < 3; i_field++) {
+    MPI_Offset start = gl_n_.x * gl_n_.y * sizeof(float) * i_field;
+    for (int row = 0; row < n_.y; row++) {
+      int idx = row + i_field * n_.y;
+      offset_[idx] = start + (o_.x + (o_.y + row) * gl_n_.x) * sizeof(float);
+    }
+  }
+
+  MPI_File_open(dm.comm(), outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh_);
+  MPI_File_set_size(fh_, 0);
+  idx_frame_ = 0;
+}
+
+template<typename TPar, typename T>
+void FeildExporter::coarse_grain(const std::vector<TPar>& p_arr, T* rho, T* vx, T* vy) {
+  const auto end = p_arr.end();
+  for (auto it = p_arr.cbegin(); it != end; ++it) {
+    const TPar& p = *it;
+    int idx = int((p.pos.x - origin_.x) * inv_lc_.x) + int((p.pos.y - origin_.y) * inv_lc_.y) * n_.x;
+    rho[idx] += 1.;
+    vx[idx] += p.ori.x;
+    vy[idx] += p.ori.y;
+  }
+}
+
+template<typename TPar>
+void FeildExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
+  if (need_export(i_step)) {
+    float* rho = new float[n_grids_]();
+    float* vx = new float[n_grids_]();
+    float* vy = new float[n_grids_]();
+    coarse_grain(p_arr, rho, vx, vy);
+
+    write_data(rho, vx, vy);
+    
+    delete[] rho;
+    delete[] vx;
+    delete[] vy;
+  }
+}
+
+/**
+ * @brief Output time-averaged fields of density and momentum.
+ * 
+ * Accumulate density and momentum fields over "sep" time steps, then cal their
+ * time aveage.
+ * Caution: the number of grids in both x and y directions must be multiple of
+ * linear size of boxes for coarse graining.
+ */
+class TimeAveFeildExporter : public FeildExporter {
+public:
+  template <typename TDomain>
+  TimeAveFeildExporter(const std::string& outfile, int start, int n_step, int sep,
+    const Grid_2& grid, const TDomain& dm, int box_size = 4);
+
+  ~TimeAveFeildExporter();
+
+  template <typename TPar>
+  void dump(int i_step, const std::vector<TPar>& p_arr);
+  
+private:
+  int t_win_;
+  double* sum_n_;
+  double* sum_vx_;
+  double* sum_vy_;
+};
+
+template<typename TDomain>
+TimeAveFeildExporter::TimeAveFeildExporter(const std::string& outfile, int start, int n_step, int sep,
+                                           const Grid_2& grid, const TDomain& dm, int box_size)
+  : FeildExporter(outfile, start, n_step, sep, grid, dm, box_size), t_win_(sep){
+  sum_n_ = new double[n_grids_]();
+  sum_vx_ = new double[n_grids_]();
+  sum_vy_ = new double[n_grids_]();
+}
+
+template<typename TPar>
+void TimeAveFeildExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
+  if (i_step > start_) {
+    coarse_grain(p_arr, sum_n_, sum_vx_, sum_vy_);
+    if ((i_step - start_) % t_win_ == 0) {
+      float* rho = new float[n_grids_];
+      float* vx = new float[n_grids_];
+      float* vy = new float[n_grids_];
+      for (int i = 0; i < n_grids_; i++) {
+        rho[i] = sum_n_[i] / t_win_;
+        vx[i] = sum_vx_[i] / t_win_;
+        vy[i] = sum_vy_[i] / t_win_;
+      }
+      write_data(rho, vx, vy);
+      delete[] rho;
+      delete[] vx;
+      delete[] vy;
+      for (int i = 0; i < n_grids_; i++) {
+        sum_n_[i] = sum_vx_[i] = sum_vy_[i] = 0.;
+      }
+    }
   }
 }
 

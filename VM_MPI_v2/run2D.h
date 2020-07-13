@@ -107,3 +107,7 @@ void run_mult_bands(int gl_par_num, const Vec_2<double>& gl_l, double eta, doubl
 void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
                   unsigned long long seed, int n_step, int snap_interval,
                   MPI_Comm group_comm, MPI_Comm root_comm=MPI_COMM_WORLD);
+
+void run_quenched_ini_ordered(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
+                              unsigned long long seed, int n_step, double theta0,
+                              MPI_Comm group_comm, MPI_Comm root_comm = MPI_COMM_WORLD);
