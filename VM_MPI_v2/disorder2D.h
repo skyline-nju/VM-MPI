@@ -14,9 +14,15 @@ void set_random_torque(double* theta, int n, double epsilon, TRan& myran) {
     const double d = 1.0 / (n - 1);
 #elif defined RANDOM_FIELD
     const double d = 1.0 / n;
+#elif defined RANDOM_POTENTIAL
+    const double d = epsilon / (n - 1);
 #endif
   for (int i = 0; i < n; i++) {
+#ifndef RANDOM_POTENTIAL
     theta[i] = (-0.5 + i * d) * 2.0 * PI * epsilon;
+#else
+    theta[i] = i * d * 2.0 * PI;
+#endif
   }
   shuffle(theta, n, myran);
 }
@@ -196,3 +202,46 @@ RandField_2::RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Co
     std::cout << "sum of random fields: " << v_sum_gl[0] << "\t" << v_sum_gl[1] << std::endl;
   }
 }
+
+class RandPotential_2 {
+public:
+  template <typename TRan>
+  RandPotential_2(double eta, double eps, TRan& myran, const Grid_2& grid, MPI_Comm group_comm);
+
+  ~RandPotential_2() { delete[] potential_; }
+
+  template <typename TPar>
+  double get_potential(const TPar& p) const {
+    const Vec_2<double> r = p.pos - origin_;
+    return potential_[int(r.x) + int(r.y) * nx_];
+  }
+
+
+private:
+  double* potential_;
+  Vec_2<double> origin_;   // origin of the (sub)domain
+  int nx_;                // number of columns in x direction
+};
+
+template<typename TRan>
+RandPotential_2::RandPotential_2(double eta, double eps, TRan& myran, 
+                                 const Grid_2& grid, MPI_Comm group_comm)
+  : origin_(grid.lc()* grid.origin()), nx_(grid.n().x) {
+  const int n_grids = nx_ * grid.n().y;
+  potential_ = new double[n_grids];
+  RandTorque_2 rand_torque(eps, myran, grid, group_comm);
+  double p_sum = 0.;
+  for (int i = 0; i < n_grids; i++) {
+    double theta = rand_torque.get_torque(i);
+    potential_[i] = theta + eta * 2.0 * PI;
+    p_sum += theta;
+  }
+  double p_sum_gl;
+  MPI_Reduce(&p_sum, &p_sum_gl, 1, MPI_DOUBLE, MPI_SUM, 0, group_comm);
+  int my_proc;
+  MPI_Comm_rank(group_comm, &my_proc);
+  if (my_proc == 0) {
+    std::cout << "mean random potential: " << p_sum_gl/n_grids << std::endl;
+  }
+}
+

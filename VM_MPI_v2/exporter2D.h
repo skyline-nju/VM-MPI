@@ -532,7 +532,7 @@ template<typename TPar>
 void TimeAveFeildExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (i_step > start_) {
     coarse_grain(p_arr, sum_n_, sum_vx_, sum_vy_);
-    if ((i_step - start_) % t_win_ == 0) {
+    if ((i_step - start_) % t_win_ == 0 && i_step <= start_ + n_step_) {
       float* rho = new float[n_grids_];
       float* vx = new float[n_grids_];
       float* vy = new float[n_grids_];
