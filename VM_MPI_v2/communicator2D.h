@@ -132,9 +132,6 @@ void unpack_arrived_par(const double *buf, int buf_size,
 
 class Communicator_2 {
 public:
-  template <class TDomain>
-  Communicator_2(const TDomain& dm, double rho0, double amplification);
-
   template <class TDomain, class TGrid>
   Communicator_2(const TDomain& dm, const TGrid& grid, double rho0, double amplification);
 
@@ -226,23 +223,6 @@ void Communicator_2::set_comm_shell(const Vec_2<T>& cells_size) {
   find_shell(extended_cells_size, thickness, outer_shell_);
 }
 
-template<class TDomain>
-Communicator_2::Communicator_2(const TDomain& dm, double rho0, double amplification):
-                               flag_comm_(dm.flag_comm()), comm_(dm.comm()) {
-  my_rank_ = dm.rank().x + dm.rank().y * dm.size().x;
-  tot_proc_ = dm.size().x * dm.size().y;
-
-  dm.find_neighbor(neighbor_);
-  set_comm_shell(dm.grid().n());
-  max_buf_size_ = get_max_buf_size(rho0, amplification, dm.l());
-  for (int i = 0; i < 4; i++) {
-    buf_[i] = new double[max_buf_size_];
-    buf_size_[i] = max_buf_size_;
-  }
-
-  vacant_pos_.reserve(max_buf_size_);
-}
-
 template <class TDomain, class TGrid>
 Communicator_2::Communicator_2(const TDomain& dm, const TGrid& grid, double rho0, double amplification):
                               flag_comm_(dm.proc_size().x > 1, dm.proc_size().y > 1), comm_(dm.comm()) {
@@ -271,11 +251,20 @@ void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw,
 
   //! transfer data backward
   MPI_Irecv(buf_[0], buf_size_[0], MPI_DOUBLE, next_proc, tag_bw, comm_, &req[0]);
-  pack(buf_[1], buf_size_[1], prev_block);
+  if (prev_proc != MPI_PROC_NULL) {
+    pack(buf_[1], buf_size_[1], prev_block);
+  } else {
+    buf_size_[1] = 0;
+  }
   MPI_Isend(buf_[1], buf_size_[1], MPI_DOUBLE, prev_proc, tag_bw, comm_, &req[1]);
+
   //! transfer data forward
   MPI_Irecv(buf_[2], buf_size_[2], MPI_DOUBLE, prev_proc, tag_fw, comm_, &req[2]);
-  pack(buf_[3], buf_size_[3], next_block);
+  if (next_proc != MPI_PROC_NULL) {
+    pack(buf_[3], buf_size_[3], next_block);
+  } else {
+    buf_size_[3] = 0;
+  }
   MPI_Isend(buf_[3], buf_size_[3], MPI_DOUBLE, next_proc, tag_fw, comm_, &req[3]);
 
   //! do something while waiting
@@ -287,7 +276,6 @@ void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw,
   MPI_Wait(&req[2], &stat[2]);
   MPI_Get_count(&stat[2], MPI_DOUBLE, &buf_size_[2]);
   unpack(buf_[2], buf_size_[2]);
-
 
   MPI_Wait(&req[1], &stat[1]);
   MPI_Wait(&req[3], &stat[3]);

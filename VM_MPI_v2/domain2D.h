@@ -77,6 +77,20 @@ void Domain_2::find_neighbor(T (*neighbor)[2]) const {
       neighbor[dim][0] = neighbor[dim][1] = MPI_PROC_NULL;
     }
   }
+#if defined REF_WALL_Y || defined REF_WALL_XY
+  if (proc_rank_.y == 0) {
+    neighbor[1][0] = MPI_PROC_NULL;
+  } else if (proc_rank_.y == proc_size_.y - 1) {
+    neighbor[1][1] = MPI_PROC_NULL;
+  }
+#endif
+#ifdef REF_WALL_XY
+  if (proc_rank_.x == 0) {
+    neighbor[0][0] = MPI_PROC_NULL;
+  } else if (proc_rank_.x == proc_size_.x - 1) {
+    neighbor[0][1] = MPI_PROC_NULL;
+  }
+#endif
 }
 
 /**
@@ -89,10 +103,21 @@ class PeriodicDomain_2 : public Domain_2 {
 public:
   PeriodicDomain_2(const Vec_2<double>& gl_l, const Vec_2<int>& proc_size, MPI_Comm group_comm) :
     Domain_2(gl_l, proc_size, group_comm), gl_half_l_(0.5 * gl_l_), origin_(origin()),
-    flag_PBC_(proc_size_.x == 1, proc_size_.y == 1) {}
+#ifdef REF_WALL_Y
+    flag_PBC_(proc_size_.x == 1, false)
+#elif defined REF_WALL_XY
+    flag_PBC_(false, false)
+#else
+    flag_PBC_(proc_size_.x == 1, proc_size_.y == 1)
+#endif
+  {}
 
   void tangle(Vec_2<double>& pos) const;
+  template <typename TPar>
+  void tangle(TPar& p) const;
+
   void untangle(Vec_2<double>& v) const;
+
 protected:
   Vec_2<double> gl_half_l_;
   Vec_2<double> origin_;
@@ -108,6 +133,42 @@ inline void PeriodicDomain_2::tangle(Vec_2<double>& pos) const {
   }
 }
 
+template<typename TPar>
+void PeriodicDomain_2::tangle(TPar& p) const {
+#ifdef REF_WALL_XY
+  if (p.pos.x >= gl_l_.x) {
+    p.pos.x = gl_l_.x + gl_l_.x - p.pos.x;
+    p.ori.x = -p.ori.x;
+    p.ori_next.x = -p.ori_next.x;
+  } else if (p.pos.x < 0) {
+    p.pos.x = -p.pos.x;
+    p.ori.x = -p.ori.x;
+    p.ori_next.x = -p.ori_next.x;
+}
+#else
+  if (flag_PBC_.x) {
+    tangle_1(p.pos.x, gl_l_.x);
+  }
+#endif
+  
+#if defined REF_WALL_XY || defined REF_WALL_Y
+  if (p.pos.y >= gl_l_.y) {
+    p.pos.y = gl_l_.y + gl_l_.y - p.pos.y;
+    p.ori.y = -p.ori.y;
+    p.ori_next.y = -p.ori_next.y;
+} else if (p.pos.y < 0) {
+    p.pos.y = -p.pos.y;
+    p.ori.y = -p.ori.y;
+    p.ori_next.y = -p.ori_next.y;
+}
+#else
+  if (flag_PBC_.y) {
+    tangle_1(p.pos.y, gl_l_.y);
+
+  }
+#endif
+}
+
 inline void PeriodicDomain_2::untangle(Vec_2<double>& v) const {
   if (flag_PBC_.x) {
     untangle_1(v.x, gl_l_.x, gl_half_l_.x);
@@ -117,15 +178,6 @@ inline void PeriodicDomain_2::untangle(Vec_2<double>& v) const {
   }
 }
 
-/**
- * @brief The simulation domain is divided into grids.
- * 
- * The mesh size of the grids should be equal to or slightly larger than the
- * cutoff radius of interactions between particles. The grids described by
- * this class are real grids, while the grids in celllist class may contain
- * ghost grids.
- * 
- */
 class Grid_2 {
 public:
   template <typename TDomain>
@@ -258,3 +310,5 @@ const Vec_2<int> decompose_domain(const Vec_2<T>& gl_l, MPI_Comm group_comm) {
   }
   return proc_size;
 }
+
+

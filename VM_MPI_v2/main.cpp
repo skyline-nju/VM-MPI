@@ -67,13 +67,14 @@ int main(int argc, char* argv[]) {
 }
 
 #else
+
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  double Lx = 2048;
-  double Ly = 2048;
+  double Lx = 256;
+  double Ly = 256;
   double eta = 0.18;
   int seed = atoi(argv[1]);
-  int n_step = 2000000;
+  int n_step = 100000;
   Vec_2<double> gl_l(Lx, Ly);
 
   double rho0 = 1.;
@@ -83,7 +84,7 @@ int main(int argc, char* argv[]) {
   double r_cut = 1.;
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
 
-  int cores_per_group = 16;
+  int cores_per_group = 4;
   int tot_proc;
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
   int n_group = tot_proc / cores_per_group;
@@ -111,7 +112,6 @@ int main(int argc, char* argv[]) {
   run_quenched_ini_ordered(gl_par_num, gl_l, eta, eps, seed, n_step, theta0, group_comm, root_comm);
   delete[] ranks;
   delete[] root_ranks;
-
   MPI_Finalize();
 }
 #endif

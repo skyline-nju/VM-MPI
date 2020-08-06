@@ -303,16 +303,16 @@ void run_quenched_ini_ordered(int gl_par_num, const Vec_2<double>& gl_l, double 
   //int field_dt2 = 100;
 
 #ifdef RANDOM_TORQUE
-  snprintf(logfile, 100, "data%s%d.%d.%d.%llu_%03d.log",
+  snprintf(logfile, 100, "data%s%d.%d.%d.%llu.%03d.log",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed, int(theta0));
-  snprintf(phifile, 100, "data%sp%d.%d.%d.%llu_%03d.dat",
+  snprintf(phifile, 100, "data%sp%d.%d.%d.%llu.%03d.dat",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed, int(theta0));
   snprintf(snapfile, 100, "data/snap%ss%d.%d.%d.%03d.%llu",
     exporter::delimiter.c_str(), int(gl_l.x), int(eta * 1000), int(eps * 1000), seed, int(theta0));
-  snprintf(field_f1, 100, "data/RT_field_%d_%.3f_%.3f_%llu_%03d_%d_%d.bin", int(gl_l.x), eta, eps, seed, int(theta0), field_t_beg1, field_dt1);
+  snprintf(field_f1, 100, "data/RT_field_%d_%.3f_%.3f_%d_%llu_%03d.bin", int(gl_l.x), eta, eps, field_dt1, seed, int(theta0));
   //snprintf(field_f2, 100, "data/RT_field_%d_%.3f_%.3f_%llu_%03d_%d_%d.bin", int(gl_l.x), eta, eps, seed, int(theta0), field_t_beg2, field_dt2);
 
-  snprintf(time_ave_f1, 100, "data/RT_ave_%d_%.3f_%.3f_%llu_%03d_%d_%d.bin", int(gl_l.x), eta, eps, seed, int(theta0), ave_t_beg1, ave_dt1);
+  snprintf(time_ave_f1, 100, "data/RT_ave_%d_%.3f_%.3f_%d_%llu_%03d.bin", int(gl_l.x), eta, eps, ave_dt1, seed, int(theta0));
   //snprintf(time_ave_f2, 100, "data/RT_ave_%d_%.3f_%.3f_%llu_%03d_%d_%d.bin", int(gl_l.x), eta, eps, seed, int(theta0), ave_t_beg2, ave_dt2);
 
 #elif defined RANDOM_FIELD
@@ -360,15 +360,21 @@ void run_quenched_ini_ordered(int gl_par_num, const Vec_2<double>& gl_l, double 
     //field_ex2.dump(i, par_arr);
   };
 
-
-  if (root_comm == MPI_COMM_WORLD) {
+  int gl_tot_proc;
+  MPI_Comm_size(MPI_COMM_WORLD, &gl_tot_proc);
+  if (gl_tot_proc == tot_proc) {
     for (int i = 1; i <= n_step; i++) {
-      //cal_force(p_arr, cl, comm, dm);
+#if defined REF_WALL_Y || defined REF_WALL_XY
+      cal_force(p_arr, cl, comm, for_all_pair_force_slow);
+#else
       cal_force(p_arr, cl, comm, for_all_pair_force_fast);
+#endif
       integrate(p_arr, cl, single_move, comm);
       out(i, p_arr);
     }
   } else {
+    std::cout << "hello, world!!" << std::endl;
+
     int i_step = 1;
     MPI_Win win_root;
     int finished_group = 0;
@@ -380,7 +386,11 @@ void run_quenched_ini_ordered(int gl_par_num, const Vec_2<double>& gl_l, double 
     }
     MPI_Bcast(&n_group, 1, MPI_INT, 0, group_comm);
     while (finished_group < n_group) {
+#if defined REF_WALL_Y || defined REF_WALL_XY
+      cal_force(p_arr, cl, comm, for_all_pair_force_slow);
+#else
       cal_force(p_arr, cl, comm, for_all_pair_force_fast);
+#endif
       integrate(p_arr, cl, single_move, comm);
       out(i_step, p_arr);
       i_step++;
