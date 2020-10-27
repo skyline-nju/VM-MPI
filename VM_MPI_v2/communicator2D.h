@@ -239,6 +239,7 @@ Communicator_2::Communicator_2(const TDomain& dm, const TGrid& grid, double rho0
 
   vacant_pos_.reserve(max_buf_size_);
 }
+
 template <typename TPack, typename TUnpack, typename TFunc>
 void Communicator_2::exchange_particle(int prev_proc, int next_proc, int tag_bw, int tag_fw,
                                        const RectBlock_2<int>& prev_block, const RectBlock_2<int>& next_block,

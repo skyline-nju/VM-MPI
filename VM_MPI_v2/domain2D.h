@@ -49,6 +49,8 @@ public:
 
   void adjust(const Vec_2<double>& l0, const Vec_2<double>& o) { l_ = l0; o_ = o; }
 
+  template <typename TPar>
+  bool contain_particle(const TPar& p) const;
 protected:
   MPI_Comm comm_;
   Vec_2<int> proc_size_;
@@ -91,6 +93,12 @@ void Domain_2::find_neighbor(T (*neighbor)[2]) const {
     neighbor[0][1] = MPI_PROC_NULL;
   }
 #endif
+}
+
+template <typename TPar>
+bool Domain_2::contain_particle(const TPar& p) const {
+  const Vec_2<double> end = o_ + l_;
+  return p.pos.x >= o_.x && p.pos.x < end.x&& p.pos.y >= o_.y && p.pos.y < end.y;
 }
 
 /**

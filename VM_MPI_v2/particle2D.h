@@ -12,6 +12,8 @@ public:
   Bird_2() = default;
   Bird_2(const Vec_2<double>& pos0, const Vec_2<double>& ori0) : pos(pos0), ori(ori0), ori_next(ori0) {}
   Bird_2(const double* buf) : pos(buf[0], buf[1]), ori(buf[2], buf[3]), ori_next(ori) {}
+
+  Bird_2(const float* buf) : pos(buf[0], buf[1]), ori(cos(buf[2]), sin(buf[2])), ori_next(ori) {}
   template <typename TRan>
   Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin);
 
@@ -55,7 +57,7 @@ inline void Bird_2::copy_to(double* dest, int& idx) const {
 }
 
 template <typename Par>
-void polar_align(Par &p1, Par &p2, const Vec_2<double>& dR) {
+void polar_align(Par& p1, Par& p2, const Vec_2<double>& dR) {
   // dR = p2.pos - p1.pos + offset
   if (dR.square() < 1.) {
     p1.ori_next += p2.ori;
@@ -119,7 +121,7 @@ void move_forward(Par& p, double v0, double dtheta) {
 template <class Par, class TDomain>
 void move_forward(Par& p, double v0, double dtheta, const TDomain& domain) {
   move_forward(p, v0, dtheta);
-  domain.tangle(p);
+  domain.tangle(p.pos);
 }
 
 
@@ -148,7 +150,7 @@ void get_vel_mean(double* vel_mean, const std::vector<TPar>& p_arr) {
 #ifdef USE_MPI
 template <typename TPar>
 void get_mean_vel(double* vel_mean, const std::vector<TPar>& p_arr,
-                  int gl_np, bool flag_broadcast, MPI_Comm group_comm) {
+  int gl_np, bool flag_broadcast, MPI_Comm group_comm) {
   get_vel_sum(vel_mean, p_arr);
   double gl_vel_sum[2];
   MPI_Reduce(vel_mean, gl_vel_sum, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);

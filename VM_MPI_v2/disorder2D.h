@@ -10,6 +10,7 @@
 
 template <typename TRan>
 void set_random_torque(double* theta, int n, double epsilon, TRan& myran) {
+#ifdef DISORDER_ON
 #ifdef RANDOM_TORQUE
     const double d = 1.0 / (n - 1);
 #elif defined RANDOM_FIELD
@@ -25,6 +26,7 @@ void set_random_torque(double* theta, int n, double epsilon, TRan& myran) {
 #endif
   }
   shuffle(theta, n, myran);
+#endif
 }
 
 class RandTorque_2 {
