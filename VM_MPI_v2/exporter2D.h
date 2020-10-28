@@ -446,8 +446,8 @@ FeildExporter::FeildExporter(const std::string& outfile, int start, int n_step, 
   n_.y = grid.n().y / box_size;
   o_.x = grid.origin().x / box_size;
   o_.y = grid.origin().y / box_size;
-  inv_lc_.x = 1. / box_size;
-  inv_lc_.y = 1. / box_size;
+  inv_lc_.x = grid.lc().x / box_size;
+  inv_lc_.y = grid.lc().y / box_size;
   frame_size_ = gl_n_.x * gl_n_.y * sizeof(float) * 3;
   n_grids_ = n_.x * n_.y;
 

@@ -65,7 +65,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   };
 #endif
 
-  // initialize intergrator
+  // initialize integrator
 #ifdef DISORDER_ON
   // initialize quenched disorder
 #ifdef RANDOM_TORQUE
@@ -97,6 +97,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   };
 #endif
 
+  // initialize particles
   int t_beg;
   ini_particles(gl_par_num, p_arr, ini_mode, myran, seed2, cl, dm, t_beg);
 
@@ -149,12 +150,14 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   };
 
   // run
+
+  bool thick_shell = v0 > 1.;
   int gl_tot_proc;
   MPI_Comm_size(MPI_COMM_WORLD, &gl_tot_proc);
   if (gl_tot_proc == tot_proc) {
     for (int i = 1; i <= n_step; i++) {
       cal_force(p_arr, cl, comm, for_all_pair_force);
-      integrate(p_arr, cl, single_move, comm);
+      integrate(p_arr, cl, single_move, comm, thick_shell);
       out(i, p_arr);
     }
   } else {
@@ -170,7 +173,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
     MPI_Bcast(&n_group, 1, MPI_INT, 0, group_comm);
     while (finished_group < n_group) {
       cal_force(p_arr, cl, comm, for_all_pair_force);
-      integrate(p_arr, cl, single_move, comm);
+      integrate(p_arr, cl, single_move, comm, thick_shell);
       out(i_step, p_arr);
       i_step++;
       if (i_step > n_step && i_step % 100 == 1) {

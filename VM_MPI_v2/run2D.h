@@ -77,18 +77,20 @@ void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicato
 }
 
 
+// recreate cell lists when all particle have moved forward one step
 template <typename TNode, typename UniFunc>
-void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
+void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm, bool thick_shell=false) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
     f_move(*it);
   }
-  cl.recreate(p_arr);
+  cl.recreate(p_arr, thick_shell);
 
-  comm.comm_after_integration(p_arr, cl);
+  comm.comm_after_integration(p_arr, cl, thick_shell);
 
 }
 
+// update cell list once one particle has moved from one cell to another cell
 template <typename TNode, typename UniFunc>
 void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();

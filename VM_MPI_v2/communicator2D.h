@@ -87,7 +87,8 @@ template <typename TNode>
 void unpack_arrived_par(const double *buf, int buf_size,
                         CellListNode_2<TNode>& cl,
                         std::vector<TNode> &p_arr,
-                        std::vector<int> &vacant_pos) {  //! should be sorted in descending order
+                        std::vector<int> &vacant_pos,  //! should be sorted in descending order
+                        bool thick_shell=false) {  
   const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
   
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
@@ -101,7 +102,11 @@ void unpack_arrived_par(const double *buf, int buf_size,
       vacant_pos.pop_back();
     }
     p_arr[idx].pos += offset;
-    cl.add_node(p_arr[idx]);
+    if (thick_shell) {
+      cl.add_node_thick_shell(p_arr[idx]);
+    } else {
+      cl.add_node(p_arr[idx]);
+    }
   }
 }
 
@@ -111,7 +116,8 @@ void unpack_arrived_par(const double *buf, int buf_size,
                         std::vector<TNode> &p_arr,
                         std::vector<int> &vacant_pos, //! should be sorted in descending order
                         std::vector<T1> &n_arr,
-                        std::vector<Vec_2<T2>> &v_arr) {
+                        std::vector<Vec_2<T2>> &v_arr,
+                        bool thick_shell=false) {
   const Vec_2<double> offset = cl.get_pos_offset(Vec_2<double>(buf[0], buf[1]));
 
   for (int buf_pos = 0; buf_pos < buf_size; buf_pos += 4) {
@@ -125,7 +131,11 @@ void unpack_arrived_par(const double *buf, int buf_size,
       vacant_pos.pop_back();
     }
     p_arr[idx].pos += offset;
-    cl.add_node(p_arr[idx], n_arr, v_arr);
+    if (thick_shell) {
+      cl.add_node_thick_shell(p_arr[idx]);
+    } else {
+      cl.add_node(p_arr[idx]);
+    }
   }
 }
 
@@ -154,7 +164,7 @@ public:
   void clear_padded_particles(CellListNode_2<TNode> &cl, std::vector<TNode> &p_arr, int n_ghost);
 
   template <typename TNode>
-  void comm_after_integration(std::vector<TNode> &p_arr, CellListNode_2<TNode>& cl);
+  void comm_after_integration(std::vector<TNode> &p_arr, CellListNode_2<TNode>& cl, bool thick_shell=false);
 
 private:
   int tot_proc_ = 1;
@@ -325,17 +335,17 @@ void Communicator_2::clear_padded_particles(CellListNode_2<TNode>& cl,
 }
 
 template <typename TNode>
-void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl) {
+void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, bool thick_shell) {
   auto pack = [&p_arr, this, &cl](double *buf, int &buf_size, const RectBlock_2<int>& block) {
     pack_leaving_par(p_arr, vacant_pos_, cl, block, buf, buf_size);
   };
 
-  auto unpack = [&p_arr, this, &cl](double *buf, int buf_size) {
+  auto unpack = [&p_arr, this, &cl, thick_shell](double *buf, int buf_size) {
     int new_size = buf_size / 4 + p_arr.size() - vacant_pos_.size();
     if (new_size > p_arr.capacity()) {
       cl.reserve_particles(p_arr, new_size);
     }
-    unpack_arrived_par(buf, buf_size, cl, p_arr, vacant_pos_);
+    unpack_arrived_par(buf, buf_size, cl, p_arr, vacant_pos_, thick_shell);
   };
 
   auto sort_descending = [this]() {
