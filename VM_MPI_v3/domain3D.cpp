@@ -1,28 +1,28 @@
 #define TEST 10
 #include "domain3D.h"
 
-Domain_3::Domain_3(const Vec3d & gl_l)
-  : l_(gl_l), gl_l_(gl_l), gl_half_l_(gl_l * 0.5) {}
-
-Domain_3::Domain_3(const Vec3d& gl_l, const Vec3i& gl_size,
-                   const Vec3i& gl_cells_size, Vec3i& cells_size,
-                   Vec3d& origin, Vec3b &flag_c)
-  : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5), gl_size_(gl_size),
-    gl_cells_size_(gl_cells_size), cells_size_(cells_size) {
-  find_neighbor(rank_, flag_comm_, neighbor);
-  flag_c = flag_comm_;
-  set_l(gl_cells_size, cells_size, l_, origin_);
-  origin = origin_;
-  set_comm_block(cells_size, flag_comm_, inner_shell, outer_shell);
-}
-
-Domain_3::Domain_3(const Vec3d& gl_l, const Vec3i& gl_cells_size,
-                   Vec3i& cells_size, Vec3d& origin, Vec3b& flag_c)
-  : Domain_3(gl_l, partition(gl_l_), gl_cells_size, cells_size, origin, flag_c) {}
+//Domain_3::Domain_3(const Vec3d & gl_l)
+//  : l_(gl_l), gl_l_(gl_l), gl_half_l_(gl_l * 0.5) {}
+//
+//Domain_3::Domain_3(const Vec3d& gl_l, const Vec3i& gl_size,
+//                   const Vec3i& gl_cells_size, Vec3i& cells_size,
+//                   Vec3d& origin, Vec3b &flag_c)
+//  : l_(), gl_l_(gl_l), gl_half_l_(gl_l_ * 0.5), gl_size_(gl_size),
+//    gl_cells_size_(gl_cells_size), cells_size_(cells_size) {
+//  find_neighbor(rank_, flag_comm_, neighbor);
+//  flag_c = flag_comm_;
+//  set_l(gl_cells_size, cells_size, l_, origin_);
+//  origin = origin_;
+//  set_comm_block(cells_size, flag_comm_, inner_shell, outer_shell);
+//}
+//
+//Domain_3::Domain_3(const Vec3d& gl_l, const Vec3i& gl_cells_size,
+//                   Vec3i& cells_size, Vec3d& origin, Vec3b& flag_c)
+//  : Domain_3(gl_l, partition(gl_l_), gl_cells_size, cells_size, origin, flag_c) {}
 
 void Domain_3::find_neighbor(Vec3i &rank, Vec3b &flag_comm, int neighbor[3][2]) const {
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm_, &my_rank);
   const int nx = gl_size_.x;
   const int nx_ny = gl_size_.x * gl_size_.y;
   rank.x = (my_rank % nx_ny) % nx;
@@ -76,7 +76,7 @@ void Domain_3::set_l(const Vec3i& gl_cells_size, Vec3i& cells_size,
   }
 #if TEST == 0
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm_, &my_rank);
   if (my_rank == 1) {
     std::cout << "origin:\t" << origin << std::endl;
     std::cout << "l:\t" << l << std::endl;
@@ -106,7 +106,7 @@ void Domain_3::set_max_buf_size(int gl_par_num, double amplification) {
     int n0 = int(rho0 * area[0] * amplification);
     max_buf_size_ = 6 * n0;
     int my_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    MPI_Comm_rank(group_comm_, &my_rank);
 
     if (my_rank == 0) {
       std::cout << "max area = " << area[0] << std::endl;
@@ -163,11 +163,11 @@ Vec_3<int> Domain_3::partition(const Vec3d& l, int n_proc) {
   return Vec3i(n_opt[idx[0]], n_opt[idx[1]], n_opt[idx[2]]);
 }
 
-Vec_3<int> Domain_3::partition(const Vec3d& l) {
+Vec_3<int> Domain_3::partition(const Vec3d& l, MPI_Comm group_comm) {
 #ifdef USE_MPI
   int tot_proc, my_rank;
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-  MPI_Comm_size(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_size(group_comm, &tot_proc);
+  MPI_Comm_size(group_comm, &my_rank);
   Vec_3<int> domains_size = partition(l, tot_proc);
   if (my_rank == 0)
     std::cout << "domains size = " << domains_size << std::endl;

@@ -15,14 +15,14 @@ public:
   typedef Vec_3<int> Vec3i;
   typedef Vec_3<bool> Vec3b;
 
-  explicit Domain_3(const Vec3d &gl_l);
-  explicit Domain_3(const Vec3d &gl_l, const Vec3i &gl_size,
-                    const Vec3i &gl_cells_size, Vec3i &cells_size,
-                    Vec3d &origin, Vec3b &flag_c);
-  explicit Domain_3(const Vec3d &gl_l, const Vec3i &gl_cells_size,
-                    Vec3i &cells_size, Vec3d &origin, Vec3b &flag_c);
+  //explicit Domain_3(const Vec3d &gl_l);
+  //explicit Domain_3(const Vec3d &gl_l, const Vec3i &gl_size,
+  //                  const Vec3i &gl_cells_size, Vec3i &cells_size,
+  //                  Vec3d &origin, Vec3b &flag_c);
+  //explicit Domain_3(const Vec3d &gl_l, const Vec3i &gl_cells_size,
+  //                  Vec3i &cells_size, Vec3d &origin, Vec3b &flag_c);
   template <typename TNode>
-  explicit Domain_3(const Vec3d &gl_l, CellListNode_3<TNode> **cl, double r_cut = 1.);
+  explicit Domain_3(const Vec3d &gl_l, CellListNode_3<TNode> **cl, MPI_Comm group_comm, double r_cut = 1.);
   
   void find_neighbor(Vec3i &rank, Vec3b &flag_comm, int neighbor[3][2]) const;
 
@@ -43,9 +43,10 @@ public:
   const Vec3i & gl_cells_size() const { return gl_cells_size_; }
   const Vec3i & cells_size() const { return cells_size_; }
   const int & max_buf_size() const { return max_buf_size_; }
-  
+  MPI_Comm comm() const { return group_comm_; }
+
   static Vec_3<int> partition(const Vec3d &l, int n_proc);
-  static Vec_3<int> partition(const Vec3d &l);
+  static Vec_3<int> partition(const Vec3d &l, MPI_Comm group_comm);
 
   int neighbor[3][2]{};
   Vec_3<block_t> inner_shell[2]{};
@@ -63,16 +64,18 @@ protected:
   Vec3i gl_cells_size_{};
   Vec3i cells_size_{};
 
+  MPI_Comm group_comm_;
   int max_buf_size_ = 0;
 };
 
 template <typename TNode>
-Domain_3::Domain_3(const Vec3d& gl_l, CellListNode_3<TNode>** cl, double r_cut)
-  : gl_l_(gl_l), gl_half_l_(gl_l * 0.5), gl_size_(partition(gl_l_)) {
+Domain_3::Domain_3(const Vec3d& gl_l, CellListNode_3<TNode>** cl,
+                   MPI_Comm group_comm, double r_cut)
+  : gl_l_(gl_l), gl_half_l_(gl_l * 0.5), gl_size_(partition(gl_l_, group_comm)), group_comm_(group_comm) {
   Vec_3<double> cell_len{};
   CellListNode_3<TNode>::partition(gl_l_, r_cut, gl_cells_size_, cell_len);
   find_neighbor(rank_, flag_comm_, neighbor);
   set_l(gl_cells_size_, cells_size_, l_, origin_);
-  set_comm_block(cells_size_, flag_comm_, inner_shell, outer_shell);
+  set_comm_block(cells_size_, flag_comm_, inner_shell, outer_shell, group_comm_);
   *cl = new CellListNode_3<TNode>(cells_size_, cell_len, gl_l_, origin_, flag_comm_);
 }

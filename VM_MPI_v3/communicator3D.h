@@ -9,13 +9,14 @@ struct block_t {
   Vec_3<int> end;
 };
 
-void test_comm_velocity();
+//void test_comm_velocity();
 
 void find_shell(const Vec_3<int> &n, const Vec_3<int> &thickness,
                 Vec_3<block_t> shell[2]);
 
 void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
-                    Vec_3<block_t> inner_shell[2], Vec_3<block_t> outer_shell[2]);
+                    Vec_3<block_t> inner_shell[2], Vec_3<block_t> outer_shell[2],
+                    MPI_Comm group_comm);
 
 template <typename TNode>
 void pack_ghost_par(double *buf, int &buf_size,
@@ -108,7 +109,7 @@ void unpack_arrived_par(const double *buf, int buf_size,
 template <typename TPack, typename TUnpack, typename TFunc>
 void comm_par(int prev_proc, int next_proc, int tag_bw, int tag_fw,
               const block_t &prev_block, const block_t &next_block,
-              int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth) {
+              int max_buf_size, TPack pack, TUnpack unpack, TFunc do_sth, MPI_Comm group_comm) {
   MPI_Request req[4];
   MPI_Status stat[4];
   double *buf[4];
@@ -119,13 +120,13 @@ void comm_par(int prev_proc, int next_proc, int tag_bw, int tag_fw,
   }
 
   //! transfer data backward
-  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_proc, tag_bw, MPI_COMM_WORLD, &req[0]);
+  MPI_Irecv(buf[0], buf_size[0], MPI_DOUBLE, next_proc, tag_bw, group_comm, &req[0]);
   pack(buf[1], buf_size[1], prev_block);
-  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_proc, tag_bw, MPI_COMM_WORLD, &req[1]);
+  MPI_Isend(buf[1], buf_size[1], MPI_DOUBLE, prev_proc, tag_bw, group_comm, &req[1]);
   //! tarnsfer data forward
-  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_proc, tag_fw, MPI_COMM_WORLD, &req[2]);
+  MPI_Irecv(buf[2], buf_size[2], MPI_DOUBLE, prev_proc, tag_fw, group_comm, &req[2]);
   pack(buf[3], buf_size[3], next_block);
-  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, tag_fw, MPI_COMM_WORLD, &req[3]);
+  MPI_Isend(buf[3], buf_size[3], MPI_DOUBLE, next_proc, tag_fw, group_comm, &req[3]);
 
   //! do something while waiting
   do_sth();
@@ -152,7 +153,8 @@ void comm_par_before_interact(const int neighbor_proc[3][2],
                               int max_buf_size,
                               std::vector<TNode> &p_arr,
                               CellListNode_3<TNode> &cl,
-                              int& n_ghost) {
+                              int& n_ghost,
+                              MPI_Comm group_comm) {
   n_ghost = 0;
 
   auto pack = [&cl](double *buf, int &buf_size, const block_t& block) {
@@ -170,7 +172,7 @@ void comm_par_before_interact(const int neighbor_proc[3][2],
       const auto & prev_block = inner_shell[0][direction];
       const auto & next_block = inner_shell[1][direction];
       comm_par(prev_proc, next_proc, 13, 31, prev_block, next_block,
-               max_buf_size, pack, unpack, [](){});
+               max_buf_size, pack, unpack, [](){}, group_comm);
     }
   }
 }
@@ -230,7 +232,8 @@ void comm_par_after_move(const int neighbor_proc[3][2],
                          const Vec_3<block_t> outer_shell[2],
                          int max_buf_size,
                          std::vector<TNode> &p_arr,
-                         CellListNode_3<TNode>& cl) {
+                         CellListNode_3<TNode>& cl,
+                         MPI_Comm group_comm) {
   std::vector<int> vacant_pos;
   vacant_pos.reserve(max_buf_size);
   auto pack = [&p_arr, &vacant_pos, &cl](double *buf, int &buf_size, const block_t& block) {
@@ -252,7 +255,7 @@ void comm_par_after_move(const int neighbor_proc[3][2],
       const auto & prev_block = outer_shell[0][direction];
       const auto & next_block = outer_shell[1][direction];
       comm_par(prev_proc, next_proc, 24, 42, prev_block, next_block,
-               max_buf_size, pack, unpack, sort_desending);
+               max_buf_size, pack, unpack, sort_desending, group_comm);
     }
   }
 

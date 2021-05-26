@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
   typedef BiNode<VicsekPar_3> node_t;
   CellListNode_3<node_t> *cl;
   std::vector<node_t> p_arr;
-  Domain_3 dm(gl_l, &cl, r_cut);
+  Domain_3 dm(gl_l, &cl, r_cut, MPI_COMM_WORLD);
   ini_rand(p_arr, gl_par_num, myran, *cl, dm);
 
   // pair-wise interaction
@@ -74,12 +74,18 @@ int main(int argc, char* argv[]) {
     };
     run(p_arr, gl_par_num, interact, integ, out, n_step);
   } else {
+#ifdef RAND_FIELD
+    RandField disorder(eps, myran, dm.origin(), dm.cells_size(), dm.gl_cells_size(), )
+#else
     RandTorqueArr torques(eps, myran, dm.origin(), dm.cells_size(), dm.gl_cells_size());
+#endif
     auto integ = [&dm, cl, &myran, eta, v0, &torques](std::vector<node_t> &par_arr) {
       integrate(par_arr, myran, *cl, dm, eta, v0, torques);
     };
     run(p_arr, gl_par_num, interact, integ, out, n_step);
   }
+
+
 
   delete log;
   delete field_exp;

@@ -6,22 +6,38 @@
 #include "rand.h"
 #include "run2D.h"
 #include "particle2D.h"
+#ifdef OUTPUT_ON
+#include "exporter2D.h"
+#endif
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  int my_rank, tot_proc;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  double Lx = atof(argv[1]);
+  double Ly = atof(argv[2]);
+  double eta = atof(argv[3]);
+  double eps = atof(argv[4]);
+  unsigned long long seed = atoi(argv[5]);
+  int seed2 = atof(argv[6]);
+  int n_step = atof(argv[7]);
+  Vec_2<double> gl_l(Lx, Ly);
+#ifdef RANDOM_OBSTACLE
+  double rho_s = atof(argv[8]);
+#endif
+  int cores_per_sample = atoi(argv[9]);
 
-  int arg_size = 8;
-  if ((argc - 1) % arg_size != 0) {
-    std::cout << "Error, argc = " << argc << std::endl;
-    exit(1);
-  }
-  int n_group = (argc - 1) / arg_size;
-  int cores_per_group = tot_proc / n_group;
+  double rho0 = 1.;
+  int my_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  double v0 = 0.5;
+  double r_cut = 1.;
+  int gl_par_num = int(gl_l.x * gl_l.y * rho0);
+
+  int tot_proc;
+  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
+  int cores_per_group = cores_per_sample;
+  int n_group = tot_proc / cores_per_group;
   MPI_Group group, gl_group, root_group;
   MPI_Comm group_comm, root_comm;
 
@@ -34,32 +50,19 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < n_group; i++) {
     root_ranks[i] = i * cores_per_group;
   }
+
   MPI_Comm_group(MPI_COMM_WORLD, &gl_group);
   MPI_Group_incl(gl_group, cores_per_group, ranks, &group);
   MPI_Group_incl(gl_group, n_group, root_ranks, &root_group);
   MPI_Comm_create(MPI_COMM_WORLD, group, &group_comm);
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
-  int idx_beg = my_group * arg_size;
-  double Lx = atof(argv[1 + idx_beg]);
-  double Ly = atof(argv[2 + idx_beg]);
-  double eta = atof(argv[3 + idx_beg]);
-  double rho0 = atof(argv[4 + idx_beg]);
-  double v0 = atof(argv[5 + idx_beg]);
-  int n_step = atof(argv[6 + idx_beg]);
-  unsigned long long seed = atoi(argv[7 + idx_beg]);
-  std::string ini_mode = argv[8 + idx_beg];
+  unsigned seed1 = seed + my_group;
+  run_RO(gl_par_num, gl_l, eta, rho_s, eps, seed1, seed2, n_step, group_comm, root_comm);
 
-  Vec_2<double> gl_l(Lx, Ly);
-  double eps = 0;
-  int seed2 = 0;
-  int snap_dt = 10000;
-  int field_dt = 10000;
-  int field_dx = 8;
+  delete[] ranks;
+  delete[] root_ranks;
 
-  int gl_par_num = int(gl_l.x * gl_l.y * rho0);
-
-  run(gl_par_num, gl_l, eta, eps, v0, n_step, ini_mode,
-      seed, seed2, snap_dt, field_dt, field_dx, group_comm, root_comm);
   MPI_Finalize();
 }
+

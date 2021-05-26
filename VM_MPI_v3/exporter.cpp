@@ -21,23 +21,22 @@ std::string folder;
 std::string base_name;
 
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
-                const Vec_3<double> &gl_l0, const Vec_3<int>& domain_sizes0) {
+                const Domain_3& dm) {
   gl_n_par = gl_np;
   eta = eta0;
   eps = eps0;
   n_step = steps;
   seed = sd;
-  gl_l = gl_l0;
-  domain_sizes = domain_sizes0;
+  gl_l = dm.gl_l();
+  domain_sizes = dm.domain_sizes();
   rho0 = gl_np / (gl_l.x * gl_l.y * gl_l.z);
-  MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
-
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_proc);
+  MPI_Comm_size(dm.comm(), &tot_proc);
+  MPI_Comm_rank(dm.comm(), &my_proc);
   folder = "data" + delimiter;
   if (my_proc == 0) {
     mkdir(folder);
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(dm.comm());
   char str[100];
   snprintf(str, 100, "%g_%.2f_%.3f_%.1f_%llu", gl_l.x, eta, eps, rho0, seed);
   base_name = str;
@@ -52,9 +51,9 @@ void check_err(const int stat, const int line, const char * file) {
   }
 }
 
-int get_start_particle_num(int particle_num) {
+int get_start_particle_num(int particle_num, MPI_Comm group_comm) {
   int *particle_count_arr = new int[tot_proc];
-  MPI_Gather(&particle_num, 1, MPI_INT, particle_count_arr, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Gather(&particle_num, 1, MPI_INT, particle_count_arr, 1, MPI_INT, 0, group_comm);
   int particle_start_num;
   int *particle_start_arr = new int[tot_proc];
   if (my_proc == 0) {
@@ -63,7 +62,7 @@ int get_start_particle_num(int particle_num) {
       particle_start_arr[i] = particle_start_arr[i - 1] + particle_count_arr[i - 1];
     }
   }
-  MPI_Scatter(particle_start_arr, 1, MPI_INT, &particle_start_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Scatter(particle_start_arr, 1, MPI_INT, &particle_start_num, 1, MPI_INT, 0, group_comm);
   delete[] particle_count_arr;
   delete[] particle_start_arr;
   return particle_start_num;
@@ -221,8 +220,8 @@ void FieldExporter::set_coarse_grain_box(const Vec_3<int>& gl_cells_size,
   }
 }
 
-ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool flag_vel, bool flag_ori)
-                                   : frame_len_(NC_UNLIMITED), atom_len_(gl_n_par),
+ParticleExporter::ParticleExporter(int frame_interval, int first_frame, MPI_Comm group_comm, bool flag_vel, bool flag_ori)
+                                   : frame_len_(NC_UNLIMITED), atom_len_(gl_n_par), group_comm_(group_comm_),
                                      flag_vel_(flag_vel), flag_ori_(flag_ori) {
   set_lin_frame(frame_interval, n_step, first_frame);
   cell_lengths_data_[0] = gl_l.x;
@@ -237,7 +236,7 @@ ParticleExporter::ParticleExporter(int frame_interval, int first_frame, bool fla
 #ifdef _MSC_VER
   auto stat = nc_create(filename_, NC_NETCDF4, &ncid_);
 #else
-  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+  auto stat = nc_create_par(filename_, NC_NETCDF4 | NC_MPIIO, group_comm_, MPI_INFO_NULL, &ncid_);
 #endif
   check_err(stat, __LINE__, __FILE__);
 

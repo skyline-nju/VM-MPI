@@ -2,6 +2,7 @@
 
 #include "comn.h"
 #include "vect.h"
+#include "domain3D.h"
 #include "netcdf.h"
 #ifndef _MSC_VER
 #include "netcdf_par.h"
@@ -9,8 +10,10 @@
 #include "mpi.h"
 
 void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd,
-                const Vec_3<double> &gl_l0, const Vec_3<int> &domain_sizes0);
+                const Domain_3& dm);
 
+
+void ini_output(int gl_np, double eta0, double eps0, int steps, unsigned long long sd, const Domain_3& dm);
 // check whether there is error when outputting netcdf file
 void check_err(const int stat, const int line, const char * file);
 
@@ -25,18 +28,12 @@ void get_new_axis(const Vec_3<T> &new_x_axis, Vec_3<T> &new_y_axis, Vec_3<T> &ne
     new_y_axis = Vec_3<double>(-new_x_axis.y, new_x_axis.x, 0);
     new_y_axis.normalize();
     new_z_axis = new_x_axis.cross(new_y_axis);
-    //double length = new_x_axis.module();
-    //double length_xy = std::sqrt(new_x_axis.x * new_x_axis.x + new_x_axis.y * new_x_axis.y);
-    //double c = length_xy / length;
-    //double s = new_x_axis.z / length;
-    //new_z_axis = Vec_3<double>(0, 0, 1);
-    //new_z_axis.rotate(c, -s, new_y_axis);
   }
 }
 
 template <typename TPar>
 void get_mean_vel(double *vel_mean, const std::vector<TPar> p_arr,
-                  int gl_np, bool flag_broadcast) {
+                  int gl_np, bool flag_broadcast, MPI_Comm group_comm) {
   vel_mean[0] = vel_mean[1] = vel_mean[2] = 0;
   auto end = p_arr.cend();
   for (auto it = p_arr.cbegin(); it != end; ++it) {
@@ -45,16 +42,16 @@ void get_mean_vel(double *vel_mean, const std::vector<TPar> p_arr,
     vel_mean[2] += (*it).ori.z;
   }
   double gl_vel_sum[3];
-  MPI_Reduce(vel_mean, gl_vel_sum, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(vel_mean, gl_vel_sum, 3, MPI_DOUBLE, MPI_SUM, 0, group_comm);
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm, &my_rank);
   if (my_rank == 0) {
     vel_mean[0] = gl_vel_sum[0] / gl_np;
     vel_mean[1] = gl_vel_sum[1] / gl_np;
     vel_mean[2] = gl_vel_sum[2] / gl_np;
   }
   if (flag_broadcast) {
-    MPI_Bcast(vel_mean, 3, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(vel_mean, 3, MPI_DOUBLE, 0, group_comm);
   }
 }
 
@@ -202,7 +199,7 @@ void FieldExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
 
 class ParticleExporter: public BaseExporter {
 public:
-  explicit ParticleExporter(int frame_interval, int first_frame,
+  explicit ParticleExporter(int frame_interval, int first_frame, MPI_Comm group_comm,
                             bool flag_vel = false, bool flag_ori=true);
 
 
@@ -224,6 +221,7 @@ private:
   int vel_parallel_id_;
   int theta_id_;
   char filename_[100];
+  MPI_Comm group_comm_;
 
   /* dimension lengths */
   const size_t frame_len_;
@@ -242,7 +240,7 @@ private:
 template<typename TPar>
 void ParticleExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
-    int stat = nc_open_par(filename_, NC_WRITE|NC_MPIIO, MPI_COMM_WORLD, MPI_INFO_NULL, &ncid_);
+    int stat = nc_open_par(filename_, NC_WRITE|NC_MPIIO, group_comm_, MPI_INFO_NULL, &ncid_);
     check_err(stat, __LINE__, __FILE__);
     /* time step */
     stat = nc_inq_varid(ncid_, "time", &time_id_);

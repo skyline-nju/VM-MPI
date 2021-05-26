@@ -1,8 +1,8 @@
 #include "communicator3D.h"
 #include "comn.h"
 #include "rand.h"
-#define TEST 2
 
+/*
 void test_comm_velocity() {
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -127,6 +127,7 @@ void test_comm_velocity() {
   //show(199);
 
 }
+*/
 
 void find_shell(const Vec_3<int> &n, const Vec_3<int> &thickness,
                 Vec_3<block_t> shell[2]) {
@@ -151,7 +152,8 @@ void find_shell(const Vec_3<int> &n, const Vec_3<int> &thickness,
 }
 
 void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
-                    Vec_3<block_t> inner_shell[2], Vec_3<block_t> outer_shell[2]) {
+                    Vec_3<block_t> inner_shell[2], Vec_3<block_t> outer_shell[2],
+                    MPI_Comm group_comm) {
   Vec_3<int> thickness{};
   for (int dim = 0; dim < 3; dim++) {
     thickness[dim] = flag_comm[dim] ? 1 : 0;
@@ -168,9 +170,9 @@ void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
   const Vec_3<int> extended_cells_size = cells_size + thickness * 2;
   find_shell(extended_cells_size, thickness, outer_shell);
 
-#if TEST == 2
+
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm, &my_rank);
   if (my_rank == 0) {
     std::cout << "proc = " << my_rank << std::endl;
     std::cout << "n: " << cells_size << std::endl;
@@ -190,5 +192,4 @@ void set_comm_block(const Vec_3<int> &cells_size, const Vec_3<bool> &flag_comm,
     std::cout << std::endl;
   std::cout << "----------" << std::endl;
   }
-#endif
 }

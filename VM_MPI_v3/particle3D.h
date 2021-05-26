@@ -16,9 +16,6 @@ public:
   template<typename TRan>
   VicsekPar_3(TRan &myran, const Vec_3<double> &l, const Vec_3<double> &origin);
 
-  Vec_3<double> pos;
-  Vec_3<double> ori;
-  Vec_3<double> ori_next;
 
   template <class Par>
   void interact(Par &p);
@@ -45,6 +42,13 @@ public:
   void move(double eta, double v0, const RandTorque &torque,  TRan &myran, const Domain_3 &domain);
 
   void copy(double* dest, int& idx) const;
+
+  Vec_3<double> pos;
+  Vec_3<double> ori;
+  Vec_3<double> ori_next;
+#ifdef RAND_FIELD
+  int n_neighb=1;
+#endif
 };
 
 template <typename TRan>
@@ -62,6 +66,10 @@ void VicsekPar_3::interact(Par& p) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
+#ifdef RAND_FIELD
+  n_neighb += 1;
+  p.n_neibhb += 1;
+#endif
   }
 }
 
@@ -71,6 +79,10 @@ void VicsekPar_3::interact(Par& p, const Vec_3<double>& offset) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
+#ifdef RAND_FIELD
+  n_neighb += 1;
+  p.n_neibhb += 1;
+#endif
   }
 }
 
@@ -82,6 +94,10 @@ void VicsekPar_3::interact(Par& p, const Domain_3& domain) {
   if (dR.square() < 1) {
     ori_next += p.ori;
     p.ori_next += ori;
+#ifdef RAND_FIELD
+  n_neighb += 1;
+  p.n_neibhb += 1;
+#endif
   }
 }
 
@@ -92,6 +108,10 @@ void VicsekPar_3::interact_w_ghost(Par & ghost, const Domain_3 & domain) {
   if (dR.square() < 1) {
     ori_next += ghost.ori;
     ghost.ori_next += ori;
+#ifdef RAND_FIELD
+  n_neighb += 1;
+  p.n_neibhb += 1;
+#endif
   }
 }
 
@@ -102,6 +122,9 @@ void VicsekPar_3::move(double eta, double v0, TRan& myran) {
   ori_next.rotate_rand(theta, myran);
   ori = ori_next;
   pos += v0 * ori;
+#ifdef RAND_FIELD
+  n_neighb = 1;
+#endif
 }
 
 template <class TRan>

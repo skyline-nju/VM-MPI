@@ -28,7 +28,7 @@ public:
 
   template <typename TRan>
   static void ini(double epsilon, TRan &myran, std::vector<RandTorque> &torque,
-                  int size, int gl_size);
+                  int size, int gl_size, MPI_Comm group_comm);
 
   double cos_theta;
   double sin_theta;
@@ -49,9 +49,9 @@ void RandTorque::rotate(Vec_3<T>& v) const {
 
 template <typename TRan>
 void RandTorque::ini(double epsilon, TRan& myran, std::vector<RandTorque>& torque_arr,
-                     int size, int gl_size) {
+                     int size, int gl_size, MPI_Comm group_comm) {
   int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_rank(group_comm, &my_rank);
 
   std::vector<Vec_3<double>> ori_arr;
   std::vector<double> theta_arr;
@@ -74,11 +74,11 @@ void RandTorque::ini(double epsilon, TRan& myran, std::vector<RandTorque>& torqu
   }
 
   double gl_theta_statistic[2];
-  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);
 
   Vec_3<double> gl_v{};
-  MPI_Reduce(&v_sum.x, &gl_v, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&gl_v.x, 3, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&v_sum.x, &gl_v.x, 3, MPI_DOUBLE, MPI_SUM, 0, group_comm);
+  MPI_Bcast(&gl_v.x, 3, MPI_DOUBLE, 0, group_comm);
   gl_v.x /= gl_size;
   gl_v.y /= gl_size;
   gl_v.z /= gl_size;
@@ -104,8 +104,8 @@ void RandTorque::ini(double epsilon, TRan& myran, std::vector<RandTorque>& torqu
     torque_arr.emplace_back(std::cos(theta), std::sin(theta), ori_arr[i]);
     v_sum += theta_arr[i] * ori_arr[i];
   }
-  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&v_sum.x, &gl_v, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&theta_statistic, &gl_theta_statistic, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);
+  MPI_Reduce(&v_sum.x, &gl_v, 3, MPI_DOUBLE, MPI_SUM, 0, group_comm);
   if (my_rank == 0) {
     std::cout << "mean of theta " << gl_theta_statistic[0] / gl_size << "\n";
     std::cout << "std of theta " << std::sqrt(gl_theta_statistic[1] / gl_size - gl_theta_statistic[0] * gl_theta_statistic[0] / gl_size / gl_size) << "\n";
@@ -153,3 +153,73 @@ const RandTorque& RandTorqueArr::get_torque(const TPar &par) const {
   }
   return arr_[idx];
 }
+
+class RandField{
+public:
+  template <typename TRan>
+  RandField(double epsilon, TRan& myran, const Vec_3<double>& origin,
+            const Vec_3<int>& cells_size, const Vec_3<int> &gl_cells_size,
+            MPI_Comm group_comm);
+
+
+  template <typename TPar>
+  void apply_field(TPar& p) const;
+
+private:
+  std::vector<Vec_3<double>> fields_;
+  Vec_2<double> origin_;
+  int nx_;
+  int nx_ny_;
+  int n_tot_;
+};
+
+template <typename TRan>
+RandField::RandField(double epsilon, TRan& myran,
+                     const Vec_3<double>& origin,
+                     const Vec_3<int>& cells_size,
+                     const Vec_3<int> &gl_cells_size,
+                     MPI_Comm group_comm)
+  : origin_(origin) {
+  nx_ = cells_size.x;
+  nx_ny_ = nx_ * cells_size.y;
+  n_tot_ = nx_ny_ * cells_size.z;
+  int gl_n_tot = gl_cells_size * gl_cells_size * gl_cells_size.z;
+
+  int my_rank;
+  MPI_Comm_rank(group_comm, &my_rank);
+
+  fields_.reserve(n_tot_);
+  Vec_3<double> v_sum{};
+
+  for (int i=0; i < n_tot_; i++) {
+    Vec_3<double> v{};
+    sphere_point_picking(v.x, v.y, v.z, myran);
+    fields_.push_back(v);
+    v_sum += v;
+  }
+
+  Vec_3<double> gl_v{};
+  MPI_Reduce(&v_sum.x, &gl_v.x, 3, MPI_DOUBLE, MPI_SUM, 0, group_comm);
+  MPI_Bcast(&gl_v.x, 3, MPI_DOUBLE, 0, group_comm);
+
+  gl_v.x /= gl_size;
+  gl_v.y /= gl_size;
+  gl_v.z /= gl_size;
+
+  if (my_rank == 0) {
+    std::cout << "mean of fields " << gl_v << std::endl;
+  }
+
+  for (auto &v: fields_) {
+    v -= gl_v;
+  }
+}
+
+  template <typename TPar>
+  void RandField::apply_field(TPar& p) const {
+    const Vec_3<double> r = p.pos - origin_;
+    const int idx = int(r.x) + int(r.y) * nx_ + int(r.z) * nx_ny_;
+    p.ori_next.x += p.n_neighb * fields_[idx].x;
+    p.ori_next.y += p.n_neighb * fields_[idx].y;
+    p.ori_next.z += p.n_neighb * fields_[idx].z;
+  }
