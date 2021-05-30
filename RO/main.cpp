@@ -18,20 +18,16 @@ int main(int argc, char* argv[]) {
   double Ly = atof(argv[2]);
   double eta = atof(argv[3]);
   double eps = atof(argv[4]);
-  unsigned long long seed = atoi(argv[5]);
-  int seed2 = atof(argv[6]);
+  double rho_s = atof(argv[5]);
+  unsigned long long seed = atoi(argv[6]);
   int n_step = atof(argv[7]);
-  Vec_2<double> gl_l(Lx, Ly);
-#ifdef RANDOM_OBSTACLE
-  double rho_s = atof(argv[8]);
-#endif
+  std::string ini_mode = argv[8];
   int cores_per_sample = atoi(argv[9]);
 
+  Vec_2<double> gl_l(Lx, Ly);
   double rho0 = 1.;
   int my_rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  double v0 = 0.5;
-  double r_cut = 1.;
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
 
   int tot_proc;
@@ -57,8 +53,9 @@ int main(int argc, char* argv[]) {
   MPI_Comm_create(MPI_COMM_WORLD, group, &group_comm);
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
-  unsigned seed1 = seed + my_group;
-  run_RO(gl_par_num, gl_l, eta, rho_s, eps, seed1, seed2, n_step, group_comm, root_comm);
+  unsigned long long seed1 = seed + my_group;
+  unsigned long long seed2 = 0;
+  run_RO(gl_par_num, gl_l, eta, rho_s, eps, seed1, seed2, n_step, ini_mode, group_comm, root_comm);
 
   delete[] ranks;
   delete[] root_ranks;

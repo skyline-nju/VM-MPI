@@ -12,6 +12,7 @@ public:
   Bird_2() = default;
   Bird_2(const Vec_2<double>& pos0, const Vec_2<double>& ori0) : pos(pos0), ori(ori0), ori_next(ori0) {}
   Bird_2(const double* buf) : pos(buf[0], buf[1]), ori(buf[2], buf[3]), ori_next(ori) {}
+  Bird_2(const float* buf) : pos(buf[0], buf[1]), ori(cos(buf[2]), sin(buf[2])), ori_next(ori) {}
   template <typename TRan>
   Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin);
 

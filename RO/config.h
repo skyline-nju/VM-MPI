@@ -5,8 +5,6 @@
 #define POLAR_ALIGN
 #define SCALAR_NOISE
 
-// #define RANDOM_TORQUE
-//#define RANDOM_FIELD
 #define RANDOM_OBSTACLE
 #define SCATTER_NORMED
 

@@ -6,8 +6,6 @@
 #include <iomanip>
 #include "communicator2D.h"
 
-int ini_my_par_num(int gl_par_num, MPI_Comm group_comm);
-
 void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_Comm group_comm);
 
 template <typename TNode, typename TRan, typename TDomain>
@@ -24,46 +22,50 @@ void ini_rand(std::vector<TNode>& p_arr, int gl_par_num, TRan& myran,
 
 template <typename TNode, typename TDomain>
 void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
-                   CellListNode_2<TNode>& cl,
-                   TDomain &dm, const char* filename) {
-  int my_rank;
-  MPI_Comm_rank(dm.comm(), &my_rank);
-
+                   CellListNode_2<TNode>& cl, const TDomain& dm,
+                   const char* filename) {
   int my_par_num, n_max;
   set_particle_num(gl_par_num, my_par_num, n_max, dm.comm());
-
-  std::string basename = split(filename, "/").back();
-  std::vector<std::string> str_arr = split(basename, "_");
-  double lx_in, ly_in, rho0;
-  str_to_num(str_arr[1], lx_in);
-  str_to_num(str_arr[2], ly_in);
-  str_to_num(str_arr[4], rho0);
-  int n_in = int(lx_in * ly_in * rho0);
-
-  int n_cols = int(dm.l().x / lx_in);
-  int n_rows = int(dm.l().y / ly_in);
-
-  double buf[4];
+  p_arr.reserve(n_max);
+  float buf[3];
   std::ifstream fin(filename, std::ios::binary);
-  for(int i = 0; i < n_in; i++) {
-    fin.read((char*)buf, sizeof(double) * 4);
-    for (int row = 0; row < n_rows; row++) {
-      for (int col = 0; col < n_cols; col++) {
-        p_arr.emplace_back(buf);
-        p_arr.back().pos.x += dm.origin().x + col * lx_in;
-        p_arr.back().pos.y += dm.origin().y + row * ly_in;
-      }
+  double Lx = dm.gl_l().x;
+  double Ly = dm.gl_l().y;
+  for (int i = 0; i < gl_par_num; i++) {
+    fin.read((char*)buf, sizeof(float) * 3);
+    TNode p(buf);
+    if (p.pos.x < 0) {
+      p.pos.x += Lx;
+    } else if (p.pos.x >= Lx) {
+      p.pos.x -= Lx;
     }
-  }
-
-  if (my_rank == 0) {
-    std::cout << "ini from " << filename << std::endl;
-    std::cout << "n_cols = " << n_cols << std::endl;
-    std::cout << "n_rows = " << n_rows << std::endl;
-
+    if (p.pos.y < 0) {
+      p.pos.y += Ly;
+    } else if (p.pos.y >= Ly) {
+      p.pos.y -= Ly;
+    }
+    if (dm.contain_particle(p)) {
+      p_arr.push_back(p);
+    }
   }
   fin.close();
   cl.create(p_arr);
+
+  int my_rank;
+  MPI_Comm_rank(dm.comm(), &my_rank);
+  int my_par = p_arr.size();
+  int tot_par;
+  MPI_Reduce(&my_par, &tot_par, 1, MPI_INT, MPI_SUM, 0, dm.comm());
+
+  if (my_rank == 0) {
+    if (tot_par != gl_par_num) {
+      std::cout << "Error when loading " << filename << ", " << tot_par
+        << " instead of " << gl_par_num << " have been loaded" << std::endl;
+      exit(1);
+    } else {
+      std::cout << "Load " << tot_par << " from " << filename << std::endl;
+    }
+  }
 }
 
 template <typename TNode, typename TFunc>
@@ -74,6 +76,7 @@ void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicato
   comm.clear_padded_particles(cl, p_arr, n_ghost);
 }
 
+// recreate cell lists when all particle have moved forward one step
 template <typename TNode, typename UniFunc>
 void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();
@@ -83,9 +86,9 @@ void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_m
   cl.recreate(p_arr);
 
   comm.comm_after_integration(p_arr, cl);
-
 }
 
+// update cell list once one particle has moved from one cell to another cell
 template <typename TNode, typename UniFunc>
 void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();
@@ -100,14 +103,32 @@ void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_
   comm.comm_after_integration(p_arr, cl);
 }
 
-#if defined RANDOM_TORQUE || defined RANDOM_FIELD
-void run_quenched(int gl_par_num, const Vec_2<double>& gl_l, double eta, double eps,
-                  unsigned long long seed, int seed2, int n_step,
-                  MPI_Comm group_comm, MPI_Comm root_comm = MPI_COMM_WORLD);
-#endif
-
+template <typename TPar, typename TRan, typename TDomain>
+void ini_particles(int gl_par_num, std::vector<TPar>& p_arr,
+                   const std::string& ini_mode, TRan& myran, int seed2,
+                   CellListNode_2<TPar>& cl, const TDomain& dm, int& t_beg) {
+  if (ini_mode == "rand" || ini_mode == "ordered") {
+    unsigned long long my_seed = myran.int64() + seed2;
+    Ranq1 myran2(my_seed);
+    ini_rand(p_arr, gl_par_num, myran2, cl, dm);
+    if (ini_mode == "ordered") {
+      double angle = seed2 / 180. * PI;
+      Vec_2<double> ori0 = Vec_2<double>(cos(angle), sin(angle));
+      for (auto& p : p_arr) {
+        p.ori = p.ori_next = ori0;
+      }
+    }
+    t_beg = 0;
+  } else {
+    ini_from_snap(p_arr, gl_par_num, cl, dm, ini_mode.c_str());
+    std::vector<std::string> str_vec = split(ini_mode, "_");
+    std::vector<std::string> str_vec2 = split(str_vec.back(), ".");
+    str_to_num(str_vec2[0], t_beg);
+  }
+}
 
 void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
             double eta, double rho_s, double eps,
-            unsigned long long seed, int seed2, int n_step,
+            unsigned long long seed, unsigned long long seed2,
+            int n_step, std::string& ini_mode,
             MPI_Comm group_comm, MPI_Comm root_comm);

@@ -248,14 +248,14 @@ void OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy
 
 /**
  * @brief Output snapshot as binary format.
- * 
+ *
  * For each frame, the information of particles is saved as 3 * N float numbers.
  * 3 float number (x, y, theta) per particle.
  */
 class SnapExporter : public ExporterBase {
 public:
-  explicit SnapExporter(const std::string outfile, int start, int n_step, int sep, MPI_Comm group_comm)
-    : ExporterBase(start, n_step, sep), file_prefix_(outfile), comm_(group_comm) {}
+  explicit SnapExporter(const std::string outfile, int start, int n_step, int sep, int t_beg, MPI_Comm group_comm)
+    : ExporterBase(start, n_step, sep), file_prefix_(outfile), t_beg_(t_beg), comm_(group_comm) {}
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar>& p_arr);
@@ -263,6 +263,7 @@ public:
 private:
   int count_ = 0;
   std::string file_prefix_;
+  int t_beg_;
 #ifdef USE_MPI
   MPI_File fh_{};
   MPI_Comm comm_;
@@ -275,12 +276,12 @@ template<typename TPar>
 void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
     char filename[100];
-    snprintf(filename, 100, "%s.%04d.bin", file_prefix_.c_str(), count_);
+    snprintf(filename, 100, "%s_%08d.bin", file_prefix_.c_str(), t_beg_ + i_step);
     count_++;
     int my_n = p_arr.size();
 #ifdef USE_MPI
     MPI_File_open(comm_, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE,
-                  MPI_INFO_NULL, &fh_);
+      MPI_INFO_NULL, &fh_);
     int my_rank;
     MPI_Comm_rank(comm_, &my_rank);
     int tot_proc;
@@ -317,7 +318,7 @@ void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     fout_.write(buf, sizeof(float) * my_n * 3);
     fout_.close()
 #endif
-    delete[] buf;
+      delete[] buf;
   }
 }
 
