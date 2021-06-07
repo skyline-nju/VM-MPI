@@ -68,20 +68,21 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   }
   snprintf(scatter_f, 100, "data/scatter_%s.bin", basename);
 
-  int ave_t_beg1 = 400000;
-  int ave_dt1 = 100000;
-  int field_t_beg1 = 0;
-  int field_dt1 = 10000;
 
   // initialize random obstacles
   int n_ob = round(rho_s * gl_l.x * gl_l.y);
   Ranq1 myran(seed + my_rank);
-  RandScatter disorder(dm, grid, n_ob, myran, group_comm, scatter_f);
+  DiluteScatter disorder(dm, grid, n_ob, myran, group_comm, scatter_f);
 
   // initialize the location and orientation of particles
   int t_beg;
   ini_particles(gl_par_num, p_arr, ini_mode, myran, seed2, cl, dm, t_beg);
 
+  int ave_t_beg = 400000;
+  int ave_t_beg1 = t_beg >= ave_t_beg ? 0 : ave_t_beg - t_beg;
+  int ave_dt1 = 100000;
+  int field_t_beg1 = 0;
+  int field_dt1 = 10000;
   snprintf(logfile, 100, "data/RO_%s_%d.log", basename, t_beg);
   snprintf(phifile, 100, "data/RO_%s_%d.dat", basename, t_beg);
   snprintf(snapfile, 100, "data/snap/RO_%s", basename);
@@ -91,8 +92,8 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   exporter::LogExporter log(logfile, 0, n_step * 2, 10000, gl_par_num, group_comm);
   exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step * 2, 100, gl_l, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step * 2, 10000, t_beg,  group_comm);
-  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm);
-  exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm);
+  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm, 8);
+  exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm, 8);
 
   // cal force
   auto f1 = [](node_t* p1, node_t* p2) {

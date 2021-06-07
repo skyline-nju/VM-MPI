@@ -199,19 +199,17 @@ RandField_2::RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Co
   }
 }
 
-class RandScatter: public CellListBase_2 {
+class DiluteScatter: public CellListBase_2 {
 public:
   template <class TDomain, class TGrid, class TRan>
-  RandScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& myran, MPI_Comm group_comm, const char* outfile);
-
+  DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& myran,
+                MPI_Comm group_comm, const char* outfile);
+  
   template <typename T>
-  void scattering(T x, T y, Vec_2<double>& scat_vec, int &n_ob) const;
+  void add_obstacle(T x, T y);
 
   template <typename TPar>
   void scattering(TPar& p, double eps) const;
-  
-  int get_col(int col0, int dcol) const;
-  int get_row(int row0, int drow) const;
 
 private:
   Vec_2<double> half_gl_l_;
@@ -219,10 +217,11 @@ private:
 };
 
 template <class TDomain, class TGrid, class TRan>
-RandScatter::RandScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& myran, MPI_Comm group_comm, const char* outfile)
-    : CellListBase_2(dm, grid, 1), half_gl_l_(gl_l_ * 0.5), obstacles_(n_.x * n_.y) {
+DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob,
+                             TRan& myran, MPI_Comm group_comn, const char* outfile)
+  : CellListBase_2(dm, grid, 1), half_gl_l_(gl_l_ * 0.5), obstacles_(n_.x * n_.y) {
   int my_rank;
-  MPI_Comm_rank(group_comm, &my_rank);
+  MPI_Comm_rank(group_comn, &my_rank);
   double *buf = new double[n_ob * 2];
   if (my_rank == 0) {
     for (int i = 0; i < n_ob; i++) {
@@ -233,7 +232,7 @@ RandScatter::RandScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& m
     fout.write((char*)buf, sizeof(double) * n_ob * 2);
     fout.close();
   }
-  MPI_Bcast(buf, n_ob * 2, MPI_DOUBLE, 0, group_comm);
+  MPI_Bcast(buf, n_ob * 2, MPI_DOUBLE, 0, group_comn);
 
   double xmin = origin_.x;
   double xmax = origin_.x + l_.x;
@@ -242,74 +241,83 @@ RandScatter::RandScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& m
   for (int i = 0; i < n_ob; i++) {
     double x = buf[2 * i];
     double y = buf[2 * i + 1];
-    if (x >= xmin && x < xmax && y >= ymin && y < ymax) {
-      int ic = get_nx(x) + n_.x * get_ny(y);
-      obstacles_[ic].push_back(Vec_2<double>(x, y));
+    if (x - gl_l_.x >= xmin) {
+      x -= gl_l_.x;
+    } else if (x + gl_l_.x < xmax) {
+      x += gl_l_.x;
     }
+    if (y - gl_l_.y >= ymin) {
+      y -= gl_l_.y;
+    } else if (y + gl_l_.y < ymax) {
+      y += gl_l_.y;
+    }
+    if (x >= xmin && x < xmax && y >= ymin && y < ymax) {
+      add_obstacle(x, y);
+    }
+  }
+  for (int ic = 0; ic < n_.x * n_.y; ic++) {
+    obstacles_[ic].shrink_to_fit();
   }
   delete [] buf;
 }
 
-inline int RandScatter::get_col(int col0, int dcol) const {
-  int col = col0 + dcol;
-  if (!flag_ext_.x) {
-    if (col < 0) {
-      col += n_.x;
-    } else if (col >= n_.x) {
-      col -= n_.x;
+template <typename T>
+void DiluteScatter::add_obstacle(T x, T y) {
+  int col_c = get_nx(x);
+  int row_c = get_ny(y);
+  for (int drow = -1; drow < 2; drow++) {
+    double dy = 0;
+    int row_new = row_c + drow;
+    if (!flag_ext_.y) {
+      if (row_new < 0) {
+        row_new += n_.y;
+        dy = gl_l_.y;
+      } else if (row_new >= n_.y) {
+        row_new -= n_.y;
+        dy = -gl_l_.y;
+      }
+    } else if (row_new < 0 || row_new >= n_.y) {
+      continue;
+    }
+    int nx_row = n_.x * row_new;
+    for (int dcol = -1; dcol < 2; dcol++) {
+      double dx = 0;
+      int col_new = col_c + dcol;
+      if (!flag_ext_.x) {
+        if (col_new < 0) {
+          col_new += n_.x;
+          dx = gl_l_.x;
+        } else if (col_new >= n_.x) {
+          col_new -= n_.x;
+          dx = -gl_l_.x;
+        }
+      } else if (col_new < 0 || col_new >= n_.x) {
+        continue;
+      }
+      int ic = col_new + nx_row;
+      obstacles_[ic].push_back(Vec_2<double>(x+dx, y+dy));
     }
   }
-  return col;
-}
-inline int RandScatter::get_row(int row0, int drow) const {
-  int row = row0 + drow;
-  if (!flag_ext_.y) {
-    if (row < 0) {
-      row += n_.y;
-    } else if (row >= n_.y) {
-      row -= n_.y;
-    }
-  }
-  return row;
 }
 
-template <typename T>
-void RandScatter::scattering(T x, T y, Vec_2<double>& scat_vec, int &n_ob) const {
-  int col0 = get_nx(x);
-  int row0 = get_ny(y);
-  for (int drow = -1; drow < 2; drow++) {
-    int row = get_row(row0, drow);
-    int row_nx = row * n_.x;
-    for (int dcol = -1; dcol < 2; dcol++) {
-      int col = get_col(col0, dcol);
-      int ic = col + row_nx;
-      int size_ob = obstacles_[ic].size();
-      for (int io = 0; io < size_ob; io++) {
-        double dx = x - obstacles_[ic][io].x;
-        double dy = y - obstacles_[ic][io].y;
-        if (!flag_ext_.x) {
-          untangle_1(dx, gl_l_.x, half_gl_l_.x);
-        }
-        if (!flag_ext_.y) {
-          untangle_1(dy, gl_l_.y, half_gl_l_.y);
-        }
-        double dis2 = dx * dx + dy * dy;
-        if (dis2 < 1.) {
-          double inv_dis = 1. / sqrt(dis2);
-          scat_vec.x += dx * inv_dis;
-          scat_vec.y += dy * inv_dis;
-          n_ob++;
-        }
-      }
-    }
-  }
-}
 
 template <typename TPar>
-void RandScatter::scattering(TPar& p, double eps) const {
-  int n_ob = 0;
+void DiluteScatter::scattering(TPar &p, double eps) const{
   Vec_2<double> scat_vec(0., 0.);
-  scattering(p.pos.x, p.pos.y, scat_vec, n_ob);
+  int ic = get_ic(p);
+  int n_ob = 0;
+  int max_ob = obstacles_[ic].size();
+  for (int io=0; io < max_ob; io++) {
+    double dx = p.pos.x - obstacles_[ic][io].x;
+    double dy = p.pos.y - obstacles_[ic][io].y;
+    double dis2 = dx * dx + dy * dy;
+    if (dis2 < 1.) {
+      double inv_dis = 1. / sqrt(dis2);
+      scat_vec.x += dx * inv_dis;
+      scat_vec.y += dy * inv_dis;
+      n_ob++;
+    }
+  }
   if (n_ob > 0) {
 #ifdef SCATTER_NORMED
       p.ori_next.x = n_ob * p.ori_next.x + eps * p.n_neighb * scat_vec.x;
