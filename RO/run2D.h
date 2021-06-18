@@ -4,7 +4,9 @@
 #include "particle2D.h"
 #include "exporter2D.h"
 #include <iomanip>
+#ifdef USE_MPI
 #include "communicator2D.h"
+#endif
 
 void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_Comm group_comm);
 
@@ -51,6 +53,7 @@ void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
   fin.close();
   cl.create(p_arr);
 
+#ifdef USE_MPI
   int my_rank;
   MPI_Comm_rank(dm.comm(), &my_rank);
   int my_par = p_arr.size();
@@ -66,8 +69,10 @@ void ini_from_snap(std::vector<TNode>& p_arr, int gl_par_num,
       std::cout << "Load " << tot_par << " from " << filename << std::endl;
     }
   }
+#endif
 }
 
+#ifdef USE_MPI
 template <typename TNode, typename TFunc>
 void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicator_2& comm, TFunc for_all_pair_force) {
   int n_ghost = 0;
@@ -75,9 +80,12 @@ void cal_force(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, Communicato
   for_all_pair_force();
   comm.clear_padded_particles(cl, p_arr, n_ghost);
 }
+#endif
+
 
 // recreate cell lists when all particle have moved forward one step
 template <typename TNode, typename UniFunc>
+#ifdef USE_MPI
 void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
@@ -87,9 +95,19 @@ void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_m
 
   comm.comm_after_integration(p_arr, cl);
 }
+#else
+void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move) {
+  const auto end = p_arr.end();
+  for (auto it = p_arr.begin(); it != end; ++it) {
+    f_move(*it);
+  }
+  cl.recreate(p_arr);
+}
+#endif
 
 // update cell list once one particle has moved from one cell to another cell
 template <typename TNode, typename UniFunc>
+#ifdef USE_MPI
 void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move, Communicator_2& comm) {
   const auto end = p_arr.end();
   for (auto it = p_arr.begin(); it != end; ++it) {
@@ -102,6 +120,19 @@ void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_
   }
   comm.comm_after_integration(p_arr, cl);
 }
+#else
+void integrate2(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_move) {
+  const auto end = p_arr.end();
+  for (auto it = p_arr.begin(); it != end; ++it) {
+    int ic_old = cl.get_ic(*it);
+    f_move(*it);
+    int ic_new = cl.get_ic(*it);
+    if (ic_old != ic_new) {
+      cl.update(*it, ic_old, ic_new);
+    }
+  }
+}
+#endif
 
 template <typename TPar, typename TRan, typename TDomain>
 void ini_particles(int gl_par_num, std::vector<TPar>& p_arr,

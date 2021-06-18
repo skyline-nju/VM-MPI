@@ -41,9 +41,7 @@ class ExporterBase {
 public:
   ExporterBase() : n_step_(0) {}
 
-  ExporterBase(int start, int n_step, int sep) : start_(start), n_step_(n_step) {
-    set_lin_frame(start, n_step, sep);
-  }
+  ExporterBase(int start, int n_step, int sep, MPI_Comm group_comm);
 
   void set_lin_frame(int start, int n_step, int sep);
 
@@ -51,7 +49,12 @@ public:
 
 protected:
   int n_step_;    // total steps to run
-  int start_ = 0; // The first step 
+  int start_ = 0; // The first step
+  int my_rank_=0;
+  int tot_proc_=1;
+#ifdef USE_MPI
+  MPI_Comm comm_;
+#endif
 private:
   std::vector<int> frames_arr_; // frames that need to export
   std::vector<int>::iterator frame_iter_;
@@ -66,8 +69,10 @@ private:
  */
 class LogExporter : public ExporterBase {
 public:
-  LogExporter(const std::string& outfile, int start, int n_step, int sep, int np, MPI_Comm group_comm);
-
+  LogExporter(const std::string& outfile,
+              int start, int n_step, int sep,
+              int np, 
+              MPI_Comm group_comm);
   ~LogExporter();
 
   void record(int i_step);
@@ -76,7 +81,6 @@ public:
 private:
   std::chrono::time_point<std::chrono::system_clock> t_start_;
   int n_par_;
-  MPI_Comm comm_;
   int step_count_ = 0;
 };
 
@@ -88,8 +92,11 @@ private:
  */
 class OrderParaExporter_2 : public ExporterBase {
 public:
-  OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep, 
-    const Vec_2<double>& gl_l, MPI_Comm group_comm, int use_sub_boxes=0);
+  OrderParaExporter_2(const std::string& outfile, 
+                      int start, int n_step, int sep, 
+                      const Vec_2<double>& gl_l,
+                      MPI_Comm group_comm, 
+                      int use_sub_boxes=0);
 
   ~OrderParaExporter_2();
 
@@ -97,19 +104,21 @@ public:
   void dump(int i_step, const std::vector<TPar>& p_arr, int gl_np);
 
   template <typename TPar>
-  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl, const std::vector<TPar>& p_arr) const;
+  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl, 
+                    const std::vector<TPar>& p_arr) const;
 
-  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl, int& nx, int& ny) const;
+  void coarse_grain(int** n_gl, double** svx_gl, double** svy_gl,
+                    int& nx, int& ny) const;
 
   double get_mean_phi(int size, const int* n_gl,
     const double* svx_gl, const double* svy_gl, bool normed) const;
 
-  void cal_mean_phi(int size, const int* n_gl, const double* svx_gl, const double* svy_gl,
-    double& phi1, double& phi2);
+  void cal_mean_phi(int size, const int* n_gl,
+                    const double* svx_gl, const double* svy_gl,
+                    double& phi1, double& phi2);
 
 private:
   std::ofstream fout_;
-  MPI_Comm comm_;
 
   std::vector<int> L_arr_;
   bool flag_phi_box_;
@@ -122,9 +131,6 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
     Vec_2<double> gl_vm;
 #ifdef USE_MPI
     get_mean_vel(&gl_vm.x, p_arr, gl_np, false, comm_);
-    int my_rank, tot_proc;
-    MPI_Comm_rank(comm_, &my_rank);
-    MPI_Comm_size(comm_, &tot_proc);
 
     if (flag_phi_box_) {
       int* n_gl = nullptr;
@@ -135,7 +141,7 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
       int ny = nx;
 
       double phi1, phi2;
-      if (my_rank == 0) {
+      if (my_rank_ == 0) {
         fout_ << std::fixed << std::setw(10) << std::setprecision(8) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << "\t";
         cal_mean_phi(nx * ny, n_gl, svx_gl, svy_gl, phi1, phi2);
         fout_ << phi1 << "\t" << phi2;
@@ -154,20 +160,23 @@ void OrderParaExporter_2::dump(int i_step, const std::vector<TPar>& p_arr, int g
       delete[] svx_gl;
       delete[] svy_gl;
     } else {
-      if (my_rank == 0) {
-        fout_ << std::fixed << std::setw(16) << std::setprecision(10) << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
+      if (my_rank_ == 0) {
+        fout_ << std::fixed << std::setw(16) << std::setprecision(10) 
+              << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
       }
     }
 #else
-    get_mean_vel(&gl_vm.x, p_arr);
-    fout_ << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
+    get_vel_mean(&gl_vm.x, p_arr);
+    fout_ << std::fixed << std::setw(16) << std::setprecision(10)
+          << gl_vm.module() << "\t" << atan2(gl_vm.y, gl_vm.x) << std::endl;
 #endif
   }
 }
 
 template<typename TPar>
 void OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy_gl,
-  const std::vector<TPar>& p_arr) const {
+                                       const std::vector<TPar>& p_arr) const {
+#ifdef USE_MPI
   int my_rank, tot_proc;
   MPI_Comm_rank(comm_, &my_rank);
   MPI_Comm_size(comm_, &tot_proc);
@@ -244,6 +253,7 @@ void OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy
   delete[] n_recv;
   delete[] svx_recv;
   delete[] svy_recv;
+#endif
 }
 
 /**
@@ -254,8 +264,12 @@ void OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy
  */
 class SnapExporter : public ExporterBase {
 public:
-  explicit SnapExporter(const std::string outfile, int start, int n_step, int sep, int t_beg, MPI_Comm group_comm)
-    : ExporterBase(start, n_step, sep), file_prefix_(outfile), t_beg_(t_beg), comm_(group_comm) {}
+  explicit SnapExporter(const std::string outfile,
+                        int start, int n_step, int sep,
+                        int t_beg, 
+                        MPI_Comm group_comm)
+    : ExporterBase(start, n_step, sep, group_comm), 
+      file_prefix_(outfile), t_beg_(t_beg) {}
 
   template <typename TPar>
   void dump(int i_step, const std::vector<TPar>& p_arr);
@@ -266,7 +280,6 @@ private:
   int t_beg_;
 #ifdef USE_MPI
   MPI_File fh_{};
-  MPI_Comm comm_;
 #else
   std::ofstream fout_;
 #endif
@@ -315,10 +328,10 @@ void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     MPI_File_write_at(fh_, offset, buf, 3 * my_n, MPI_FLOAT, MPI_STATUSES_IGNORE);
     MPI_File_close(&fh_);
 #else
-    fout_.write(buf, sizeof(float) * my_n * 3);
-    fout_.close()
+    fout_.write((char*)buf, sizeof(float) * my_n * 3);
+    fout_.close();
 #endif
-      delete[] buf;
+    delete[] buf;
   }
 }
 
@@ -329,8 +342,9 @@ void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
 class RhoxExporter : public ExporterBase {
 public:
   template <typename TDomain>
-  RhoxExporter(const std::string& outfile, int start, int n_step, int sep,
-                const Grid_2& grid, const TDomain& dm);
+  RhoxExporter(const std::string& outfile, 
+               int start, int n_step, int sep,
+               const Grid_2& grid, const TDomain& dm);
 
   ~RhoxExporter();
 
@@ -341,8 +355,6 @@ private:
   int count_ = 0;
 #ifdef USE_MPI
   MPI_File fh_{};
-  int my_rank_;
-  int tot_proc_;
   MPI_Offset offset_;
   MPI_Offset frame_size_;
 #else
@@ -354,19 +366,18 @@ private:
 };
 
 template <typename TDomain>
-RhoxExporter::RhoxExporter(const std::string& outfile, int start, int n_step, int sep,
+RhoxExporter::RhoxExporter(const std::string& outfile,
+                           int start, int n_step, int sep,
                            const Grid_2& grid, const TDomain& dm)
-  : ExporterBase(start, n_step, sep), origin_(dm.origin()) {
-  frame_size_ = grid.gl_n().x * sizeof(float);
+  : ExporterBase(start, n_step, sep, dm.comm()), origin_(dm.origin()) {
   buf_size_ = grid.n().x;
   buf_ = new float[buf_size_];
   bin_area_ = dm.gl_l().y;
 #ifdef USE_MPI
-  MPI_Comm_size(dm.comm(), &tot_proc_);
-  MPI_Comm_rank(dm.comm(), &my_rank_);
+  frame_size_ = grid.gl_n().x * sizeof(float);
   offset_ = grid.origin().x * sizeof(float);
-  MPI_File_open(dm.comm(), outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE,
-    MPI_INFO_NULL, &fh_);
+  MPI_File_open(comm_, outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE,
+                MPI_INFO_NULL, &fh_);
 #else
     fout_.open(outfile.c_str(), std::ios::binary);
 #endif
@@ -391,7 +402,7 @@ void RhoxExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
     MPI_Offset my_offset = offset_ + frame_size_ * count_;
     MPI_File_write_at(fh_, my_offset, buf_, buf_size_, MPI_FLOAT, MPI_STATUSES_IGNORE);
 #else
-    fout_.write(buf, sizeof(float) * buf_size_);
+    fout_.write((char*)buf_, sizeof(float) * buf_size_);
 #endif
     count_++;
   }
@@ -428,18 +439,22 @@ protected:
   Vec_2<int> n_;
   Vec_2<int> o_;
   Vec_2<double> inv_lc_;
+  int n_grids_;
 
+#ifdef USE_MPI
   MPI_File fh_{};
   MPI_Offset frame_size_;
-  int n_grids_;
   MPI_Offset* offset_;
+#else
+  std::ofstream fout_;
+#endif
   int idx_frame_;
 };
 
 template <typename TDomain>
 FeildExporter::FeildExporter(const std::string& outfile, int start, int n_step, int sep,
                              const Grid_2& grid, const TDomain& dm, int box_size)
-  : ExporterBase(start, n_step, sep), origin_(dm.origin()) {
+  : ExporterBase(start, n_step, sep, dm.comm()), origin_(dm.origin()) {
   gl_n_.x = grid.gl_n().x / box_size;
   gl_n_.y = grid.gl_n().y / box_size;
   n_.x = grid.n().x / box_size;
@@ -448,9 +463,10 @@ FeildExporter::FeildExporter(const std::string& outfile, int start, int n_step, 
   o_.y = grid.origin().y / box_size;
   inv_lc_.x = 1. / box_size;
   inv_lc_.y = 1. / box_size;
-  frame_size_ = gl_n_.x * gl_n_.y * sizeof(float) * 3;
   n_grids_ = n_.x * n_.y;
 
+#ifdef USE_MPI
+  frame_size_ = gl_n_.x * gl_n_.y * sizeof(float) * 3;
   offset_ = new MPI_Offset[n_.y * 3]{};
 
   for (int i_field = 0; i_field < 3; i_field++) {
@@ -463,6 +479,10 @@ FeildExporter::FeildExporter(const std::string& outfile, int start, int n_step, 
 
   MPI_File_open(dm.comm(), outfile.c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh_);
   MPI_File_set_size(fh_, 0);
+#else
+  fout_.open(outfile.c_str(), std::ios::binary);
+
+#endif
   idx_frame_ = 0;
 }
 
@@ -521,8 +541,10 @@ private:
 };
 
 template<typename TDomain>
-TimeAveFeildExporter::TimeAveFeildExporter(const std::string& outfile, int start, int n_step, int sep,
-                                           const Grid_2& grid, const TDomain& dm, int box_size)
+TimeAveFeildExporter::TimeAveFeildExporter(const std::string& outfile,
+                                           int start, int n_step, int sep,
+                                           const Grid_2& grid, const TDomain& dm,
+                                           int box_size)
   : FeildExporter(outfile, start, n_step, sep, grid, dm, box_size), t_win_(sep){
   sum_n_ = new double[n_grids_]();
   sum_vx_ = new double[n_grids_]();

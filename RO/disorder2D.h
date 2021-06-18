@@ -26,10 +26,6 @@ void set_random_torque(double* theta, int n, double epsilon, TRan& myran) {
 class RandTorque_2 {
 public:
   template <typename TRan>
-  RandTorque_2(const double epsilon, TRan& myran, const Vec_2<double>& origin,
-               const Vec_2<int>& cells_size, const Vec_2<int>& gl_cells_size, MPI_Comm group_comm);
-
-  template <typename TRan>
   RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid, MPI_Comm group_comm);
 
   ~RandTorque_2() { delete[] torque_; }
@@ -48,52 +44,13 @@ private:
 };
 
 template<typename TRan>
-RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Vec_2<double>& origin,
-                           const Vec_2<int>& cells_size, const Vec_2<int>& gl_cells_size,
-                           MPI_Comm group_comm)
-                           :origin_(origin), nx_(cells_size.x) {
-  const int n_tot = nx_ * cells_size.y;
-  torque_ = new double[n_tot];
-#ifdef USE_MPI
-  const int gl_n_tot = gl_cells_size.x * gl_cells_size.y;
-  double* gl_theta = nullptr;
-  int my_rank;
-  MPI_Comm_rank(group_comm, &my_rank);
-  if (my_rank == 0) {
-    gl_theta = new double[gl_n_tot];
-    set_random_torque(gl_theta, gl_n_tot, epsilon, myran);
-    double sum = 0;
-    for (int i = 0; i < gl_n_tot; i++) {
-      sum += gl_theta[i];
-    }
-    std::cout << "sum of torque = " << sum << std::endl;
-  }
-
-  MPI_Scatter(gl_theta, n_tot, MPI_DOUBLE, torque_,
-              n_tot, MPI_DOUBLE, 0, group_comm);
-  { // test
-    double sum = 0;
-    for (int i = 0; i < n_tot; i++) {
-      sum += torque_[i];
-    }
-    double gl_sum = 0;
-    MPI_Reduce(&sum, &gl_sum, 1, MPI_DOUBLE, MPI_SUM, 0, group_comm);
-    if (my_rank == 0) {
-      std::cout << "sum of torque = " << gl_sum << std::endl;
-    }
-  }
-  delete[] gl_theta;
-#else
-  set_random_torque(torque_, n_tot, epsilon, myran);
-#endif
-}
-
-template<typename TRan>
 RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid, MPI_Comm group_comm)
                           : origin_(grid.lc() * grid.origin()), nx_(grid.n().x) {
   const int n_grids = nx_ * grid.n().y;
   torque_ = new double[n_grids];
-#ifdef USE_MPI
+#ifndef USE_MPI
+  set_random_torque(torque_, n_grids, epsilon, myran);
+#else
   const int gl_n_grids = grid.gl_n().x * grid.gl_n().y;
   double* gl_theta = nullptr;
   int my_rank, tot_proc;
@@ -143,14 +100,13 @@ RandTorque_2::RandTorque_2(const double epsilon, TRan& myran, const Grid_2& grid
   }
 
   delete[] gl_theta;
-#else
-  set_random_torque(torque_, n_grids, epsilon, myran);
 #endif
 }
 
 class RandField_2 {
 public:
   template <typename TRan>
+
   RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Comm group_comm);
 
   ~RandField_2() { delete[] field_; }
@@ -189,7 +145,9 @@ RandField_2::RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Co
     v_sum[0] += field_[i].x;
     v_sum[1] += field_[i].y;
   }
-
+#ifndef USE_MPI
+  std::cout << "sum of random fields: " << v_sum[0] << "\t" << v_sum[1] << std::endl;
+#else
   double v_sum_gl[2];
   MPI_Reduce(v_sum, v_sum_gl, 2, MPI_DOUBLE, MPI_SUM, 0, group_comm);
   int my_proc;
@@ -197,12 +155,14 @@ RandField_2::RandField_2(double epsilon, TRan& myran, const Grid_2& grid, MPI_Co
   if (my_proc == 0) {
     std::cout << "sum of random fields: " << v_sum_gl[0] << "\t" << v_sum_gl[1] << std::endl;
   }
+#endif
 }
 
 class DiluteScatter: public CellListBase_2 {
 public:
   template <class TDomain, class TGrid, class TRan>
-  DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob, TRan& myran,
+  DiluteScatter(const TDomain& dm, const TGrid& grid,
+                int n_ob, TRan& myran,
                 MPI_Comm group_comm, const char* outfile);
   
   template <typename T>
@@ -217,12 +177,16 @@ private:
 };
 
 template <class TDomain, class TGrid, class TRan>
-DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob,
-                             TRan& myran, MPI_Comm group_comn, const char* outfile)
+DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid,
+                             int n_ob, TRan& myran,
+                             MPI_Comm group_comn,
+                             const char* outfile)
   : CellListBase_2(dm, grid, 1), half_gl_l_(gl_l_ * 0.5), obstacles_(n_.x * n_.y) {
-  int my_rank;
-  MPI_Comm_rank(group_comn, &my_rank);
   double *buf = new double[n_ob * 2];
+  int my_rank = 0;
+#ifdef USE_MPI
+  MPI_Comm_rank(group_comn, &my_rank);
+#endif
   if (my_rank == 0) {
     for (int i = 0; i < n_ob; i++) {
       buf[2 * i] = gl_l_.x * myran.doub();
@@ -232,15 +196,19 @@ DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob,
     fout.write((char*)buf, sizeof(double) * n_ob * 2);
     fout.close();
   }
+#ifdef USE_MPI
   MPI_Bcast(buf, n_ob * 2, MPI_DOUBLE, 0, group_comn);
-
   double xmin = origin_.x;
   double xmax = origin_.x + l_.x;
   double ymin = origin_.y;
   double ymax = origin_.y + l_.y;
+#endif
   for (int i = 0; i < n_ob; i++) {
     double x = buf[2 * i];
     double y = buf[2 * i + 1];
+#ifndef USE_MPI
+    add_obstacle(x, y);
+#else
     if (x - gl_l_.x >= xmin) {
       x -= gl_l_.x;
     } else if (x + gl_l_.x < xmax) {
@@ -254,12 +222,14 @@ DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid, int n_ob,
     if (x >= xmin && x < xmax && y >= ymin && y < ymax) {
       add_obstacle(x, y);
     }
+#endif
   }
   for (int ic = 0; ic < n_.x * n_.y; ic++) {
     obstacles_[ic].shrink_to_fit();
   }
   delete [] buf;
 }
+
 
 template <typename T>
 void DiluteScatter::add_obstacle(T x, T y) {

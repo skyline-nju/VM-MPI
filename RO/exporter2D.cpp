@@ -1,6 +1,18 @@
 #include "exporter2D.h"
 
-void exporter::ExporterBase::set_lin_frame(int start, int n_step, int sep) {
+using namespace exporter;
+ExporterBase::ExporterBase(int start, int n_step, int sep, 
+                           MPI_Comm group_comm) {
+#ifdef USE_MPI
+  comm_ = group_comm;
+  MPI_Comm_rank(comm_, &my_rank_);
+  MPI_Comm_size(comm_, &tot_proc_);
+#endif
+  set_lin_frame(start, n_step, sep);
+}
+
+
+void ExporterBase::set_lin_frame(int start, int n_step, int sep) {
   n_step_ = n_step;
   for (auto i = start + sep; i <= n_step_; i += sep) {
     frames_arr_.push_back(i);
@@ -8,7 +20,7 @@ void exporter::ExporterBase::set_lin_frame(int start, int n_step, int sep) {
   frame_iter_ = frames_arr_.begin();
 }
 
-bool exporter::ExporterBase::need_export(int i_step) {
+bool ExporterBase::need_export(int i_step) {
   bool flag = false;
   if (!frames_arr_.empty() && i_step == (*frame_iter_)) {
     frame_iter_++;
@@ -17,30 +29,23 @@ bool exporter::ExporterBase::need_export(int i_step) {
   return flag;
 }
 
-exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_step, int sep, int np, MPI_Comm group_comm)
-  : ExporterBase(start, n_step, sep), n_par_(np), comm_(group_comm) {
-#ifdef USE_MPI
-  int my_rank;
-  MPI_Comm_rank(comm_, &my_rank);
-  if (my_rank == 0) {
-#endif
+LogExporter::LogExporter(const std::string& outfile, 
+                         int start, int n_step, int sep,
+                         int np, 
+                         MPI_Comm group_comm)
+  : ExporterBase(start, n_step, sep, group_comm), n_par_(np) {
+  if (my_rank_ == 0) {
     fout.open(outfile);
     t_start_ = std::chrono::system_clock::now();
     auto start_time = std::chrono::system_clock::to_time_t(t_start_);
     char str[100];
     std::strftime(str, 100, "%c", std::localtime(&start_time));
     fout << "Started simulation at " << str << "\n";
-#ifdef USE_MPI
   }
-#endif
 }
 
-exporter::LogExporter::~LogExporter() {
-#ifdef USE_MPI
-  int my_rank;
-  MPI_Comm_rank(comm_, &my_rank);
-  if (my_rank == 0) {
-#endif
+LogExporter::~LogExporter() {
+  if (my_rank_ == 0) {
     const auto t_now = std::chrono::system_clock::now();
     auto end_time = std::chrono::system_clock::to_time_t(t_now);
     char str[100];
@@ -52,21 +57,11 @@ exporter::LogExporter::~LogExporter() {
     fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count()
       << " particle time step per second per core\n";
     fout.close();
-#ifdef USE_MPI
   }
-#endif
 }
 
-void exporter::LogExporter::record(int i_step) {
-  bool flag;
-#ifdef USE_MPI
-  int my_rank;
-  MPI_Comm_rank(comm_, &my_rank);
-  flag = my_rank == 0 && need_export(i_step);
-#else
-  flag = need_export(i_step);
-#endif
-  if (flag) {
+void LogExporter::record(int i_step) {
+  if (need_export(i_step) && my_rank_ == 0) {
     const auto t_now = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
     const auto dt = elapsed_seconds.count();
@@ -78,48 +73,41 @@ void exporter::LogExporter::record(int i_step) {
   step_count_++;
 }
 
-exporter::OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile, int start, int n_step, int sep,
-                                                   const Vec_2<double>& gl_l, MPI_Comm group_comm, int use_sub_boxes)
-  : ExporterBase(start, n_step, sep), comm_(group_comm) {
-  int tot_proc = 1;
-#ifdef USE_MPI
-  int my_rank;
-  MPI_Comm_rank(comm_, &my_rank);
-  MPI_Comm_size(comm_, &tot_proc);
-  if (my_rank == 0) {
-#endif
+
+OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile,
+                                         int start, int n_step, int sep,
+                                         const Vec_2<double>& gl_l,
+                                         MPI_Comm group_comm,
+                                         int use_sub_boxes)
+  : ExporterBase(start, n_step, sep, group_comm){
+  if (my_rank_ == 0) {
     fout_.open(outfile);
-#ifdef USE_MPI
   }
-#endif
+
   if (use_sub_boxes && gl_l.x == gl_l.y && (int(gl_l.x) % 32) == 0) {
     flag_phi_box_ = true;
     for (int i = 32; i <= int(gl_l.x); i *= 2) {
       L_arr_.push_back(i);
     }
-    max_cells_ = int(int(gl_l.x * gl_l.y) / (32 * 32) / tot_proc * 1.5);
+    max_cells_ = int(int(gl_l.x * gl_l.y) / (32 * 32) / tot_proc_ * 1.5);
   } else {
     flag_phi_box_ = false;
     max_cells_ = 0;
   }
 }
 
-exporter::OrderParaExporter_2::~OrderParaExporter_2() {
-#ifdef USE_MPI
-  int my_rank;
-  MPI_Comm_rank(comm_, &my_rank);
-  if (my_rank == 0) {
-#endif
+OrderParaExporter_2::~OrderParaExporter_2() {
+  if (my_rank_ == 0) {
     fout_.close();
-#ifdef USE_MPI
   }
-#endif
 }
 
-void exporter::OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, double** svy_gl,
-                                                 int& nx, int& ny) const {
+void OrderParaExporter_2::coarse_grain(int** n_gl,
+                                       double** svx_gl, double** svy_gl,
+                                       int& nx, int& ny) const {
   if (nx % 2 != 0 || ny % 2 != 0) {
-    std::cout << "Error when coarse grain with nx = " << nx << ", ny = " << ny << std::endl;
+    std::cout << "Error when coarse grain with nx = " 
+              << nx << ", ny = " << ny << std::endl;
     exit(2);
   }
   int nx_new = nx / 2;
@@ -154,8 +142,9 @@ void exporter::OrderParaExporter_2::coarse_grain(int** n_gl, double** svx_gl, do
   ny = ny_new;
 }
 
-double exporter::OrderParaExporter_2::get_mean_phi(int size, const int* n_gl,
-  const double* svx_gl, const double* svy_gl, bool normed) const {
+double OrderParaExporter_2::get_mean_phi(int size, const int* n_gl,
+                                         const double* svx_gl, const double* svy_gl, 
+                                         bool normed) const {
   double phi_sum = 0;
   int count = 0;
   for (int i = 0; i < size; i++) {
@@ -179,7 +168,9 @@ double exporter::OrderParaExporter_2::get_mean_phi(int size, const int* n_gl,
   return phi_mean;
 }
 
-void exporter::OrderParaExporter_2::cal_mean_phi(int size, const int* n_gl, const double* svx_gl, const double* svy_gl, double& phi1, double& phi2) {
+void OrderParaExporter_2::cal_mean_phi(int size, const int* n_gl, 
+                                       const double* svx_gl, const double* svy_gl,
+                                       double& phi1, double& phi2) {
   phi1 = phi2 = 0;
   int count = 0;
   for (int i = 0; i < size; i++) {
@@ -192,10 +183,9 @@ void exporter::OrderParaExporter_2::cal_mean_phi(int size, const int* n_gl, cons
   }
   phi1 /= count;
   phi2 /= size;
-
 }
 
-exporter::RhoxExporter::~RhoxExporter() {
+RhoxExporter::~RhoxExporter() {
   delete[] buf_;
 #ifdef USE_MPI
   MPI_File_close(&fh_);
@@ -205,12 +195,17 @@ exporter::RhoxExporter::~RhoxExporter() {
 }
 
 
-exporter::FeildExporter::~FeildExporter() {
+FeildExporter::~FeildExporter() {
+#ifdef USE_MPI
   delete[] offset_;
   MPI_File_close(&fh_);
+#else
+  fout_.close();
+#endif
 }
 
-void exporter::FeildExporter::write_data(const float* rho, const float* vx, const float* vy) {
+void FeildExporter::write_data(const float* rho, const float* vx, const float* vy) {
+#ifdef USE_MPI
   const MPI_Offset frame_start = idx_frame_ * frame_size_;
   MPI_Offset offset1, offset2, offset3;
   int pos = 0;
@@ -223,10 +218,16 @@ void exporter::FeildExporter::write_data(const float* rho, const float* vx, cons
     MPI_File_write_at(fh_, offset3, &vy[pos],  n_.x, MPI_FLOAT, MPI_STATUSES_IGNORE);
     pos += n_.x;
   }
+#else
+  size_t buf_size = sizeof(float) * n_grids_;
+  fout_.write((char*)rho, buf_size);
+  fout_.write((char*)vx, buf_size);
+  fout_.write((char*)vy, buf_size);
+#endif
   idx_frame_++;
 }
 
-exporter::TimeAveFeildExporter::~TimeAveFeildExporter() {
+TimeAveFeildExporter::~TimeAveFeildExporter() {
   delete[] sum_n_;
   delete[] sum_vx_;
   delete[] sum_vy_;

@@ -1,18 +1,13 @@
 #include "config.h"
-#include "mpi.h"
-#include "communicator2D.h"
-#include "domain2D.h"
-#include "cellList2D.h"
-#include "rand.h"
 #include "run2D.h"
-#include "particle2D.h"
-#ifdef OUTPUT_ON
-#include "exporter2D.h"
+#ifdef USE_MPI
+#include "mpi.h"
 #endif
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
+#ifdef USE_MPI
   MPI_Init(&argc, &argv);
   int my_rank, tot_proc;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -42,8 +37,13 @@ int main(int argc, char* argv[]) {
   MPI_Group_incl(gl_group, n_group, root_ranks, &root_group);
   MPI_Comm_create(MPI_COMM_WORLD, group, &group_comm);
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
-
   int idx_beg = my_group * arg_size;
+#else
+  MPI_Comm group_comm = 0;
+  MPI_Comm root_comm = 0;
+  int idx_beg = 0;
+#endif
+
   double Lx = atof(argv[1 + idx_beg]);
   double Ly = atof(argv[2 + idx_beg]);
   double eta = atof(argv[3 + idx_beg]);
@@ -59,9 +59,10 @@ int main(int argc, char* argv[]) {
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
   run_RO(gl_par_num, gl_l, eta, rho_s, eps, seed1, seed2, n_step, ini_mode, group_comm, root_comm);
 
+#ifdef USE_MPI
   delete[] ranks;
   delete[] root_ranks;
 
   MPI_Finalize();
+#endif
 }
-

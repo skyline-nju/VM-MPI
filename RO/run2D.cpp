@@ -29,9 +29,12 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
             int n_step, std::string& ini_mode,
             MPI_Comm group_comm, MPI_Comm root_comm) {
   typedef BiNode<Bird_2> node_t;
-  int my_rank, tot_proc;
+  int my_rank = 0;
+  int tot_proc = 1;
+#ifdef USE_MPI
   MPI_Comm_rank(group_comm, &my_rank);
   MPI_Comm_size(group_comm, &tot_proc);
+#endif
   std::vector<node_t> p_arr;
   const double r_cut = 1.0;
   const double v0 = 0.5;
@@ -41,7 +44,9 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   PeriodicDomain_2 dm(gl_l, proc_size, group_comm);
   Grid_2 grid(dm, r_cut);
   CellListNode_2<node_t> cl(dm, grid);
+#ifdef USE_MPI
   Communicator_2 comm(dm, grid, rho_0, 40.);
+#endif
 
   // output setting
   if (my_rank == 0) {
@@ -52,7 +57,10 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
     mkdir("data/snap");
 #endif
   }
+
+#ifdef USE_MPI
   MPI_Barrier(group_comm);
+#endif
 
   char logfile[100];
   char phifile[100];
@@ -139,7 +147,13 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
     ave_ex1.dump(i, par_arr);
     field_ex1.dump(i, par_arr);
   };
-
+#ifndef USE_MPI
+  for (int i = 1; i <= n_step; i++) {
+    for_all_pair_force_fast();
+    integrate(p_arr, cl, single_move);
+    out(i, p_arr);
+  }
+#else
   if (root_comm == MPI_COMM_WORLD) {
     for (int i = 1; i <= n_step; i++) {
       cal_force(p_arr, cl, comm, for_all_pair_force_fast);
@@ -180,6 +194,7 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
     }
     MPI_Barrier(MPI_COMM_WORLD);
   }
+#endif
 
   std::cout << "finish" << std::endl;
 }

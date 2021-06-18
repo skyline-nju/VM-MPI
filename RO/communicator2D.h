@@ -1,4 +1,6 @@
 #pragma once
+#ifdef USE_MPI
+
 #include "mpi.h"
 #include "vect.h"
 #include "cellList2D.h"
@@ -367,3 +369,5 @@ void Communicator_2::comm_after_integration(std::vector<TNode>& p_arr, CellListN
   cl.make_compact(p_arr, vacant_pos_);
 
 }
+
+#endif
