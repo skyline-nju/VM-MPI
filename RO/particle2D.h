@@ -10,9 +10,16 @@
 class Bird_2 {
 public:
   Bird_2() = default;
+#ifndef CONTINUE_DYNAMIC
   Bird_2(const Vec_2<double>& pos0, const Vec_2<double>& ori0) : pos(pos0), ori(ori0), ori_next(ori0) {}
   Bird_2(const double* buf) : pos(buf[0], buf[1]), ori(buf[2], buf[3]), ori_next(ori) {}
   Bird_2(const float* buf) : pos(buf[0], buf[1]), ori(cos(buf[2]), sin(buf[2])), ori_next(ori) {}
+#else
+  Bird_2(const Vec_2<double>& pos0, const Vec_2<double>& ori0) : pos(pos0), ori(ori0), tau(0.) {}
+  Bird_2(const double* buf) : pos(buf[0], buf[1]), ori(buf[2], buf[3]), tau(0.) {}
+  Bird_2(const float* buf) : pos(buf[0], buf[1]), ori(cos(buf[2]), sin(buf[2])), tau(0.) {}
+#endif
+
   template <typename TRan>
   Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin);
 
@@ -24,9 +31,13 @@ public:
 
   Vec_2<double> pos;
   Vec_2<double> ori;
+#ifndef CONTINUE_DYNAMIC
   Vec_2<double> ori_next;
+#else
+  double tau;
+#endif
 
-#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE
+#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE || defined CONTINUE_DYNAMIC
   int n_neighb = 1;
 #endif
 };
@@ -36,13 +47,23 @@ Bird_2::Bird_2(TRan& myran, const Vec_2<double>& l, const Vec_2<double>& origin)
   const Vec_2<double> rand_vec2(myran.doub(), myran.doub());
   pos = origin + rand_vec2 * l;
   circle_point_picking(ori.x, ori.y, myran);
+#ifndef CONTINUE_DYNAMIC
   ori_next = ori;
+#else
+  tau = 0;
+#endif
 }
 
 inline void Bird_2::copy_from(const Vec_2<double>& pos_new, const Vec_2<double>& ori_new) {
   pos = pos_new;
-  ori = ori_next = ori_new;
-#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE
+  ori = ori_new;
+#ifndef CONTINUE_DYNAMIC
+  ori_next = ori_new;
+#else
+  tau = 0.;
+#endif
+
+#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE || defined CONTINUE_DYNAMIC
   n_neighb = 1;
 #endif
 }
@@ -59,9 +80,15 @@ template <typename Par>
 void polar_align(Par &p1, Par &p2, const Vec_2<double>& dR) {
   // dR = p2.pos - p1.pos + offset
   if (dR.square() < 1.) {
+#ifndef CONTINUE_DYNAMIC
     p1.ori_next += p2.ori;
     p2.ori_next += p1.ori;
-#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE
+#else
+    double torque = p2.ori.y * p1.ori.x - p2.ori.x * p1.ori.y;
+    p1.tau += torque;
+    p2.tau -= torque;
+#endif
+#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE || defined CONTINUE_DYNAMIC
     p1.n_neighb++;
     p2.n_neighb++;
 #endif
@@ -79,6 +106,7 @@ template <typename Par>
 void nematic_align(Par& p1, Par& p2, const Vec_2<double>& dR) {
   // dR = p2.pos - p1.pos + offset
   if (dR.square() < 1.) {
+#ifndef CONTINUE_DYNAMIC
     if (p1.ori.dot(p2.ori) > 0) {
       p1.ori_next += p2.ori;
       p2.ori_next += p1.ori;
@@ -86,7 +114,14 @@ void nematic_align(Par& p1, Par& p2, const Vec_2<double>& dR) {
       p1.ori_next -= p2.ori;
       p2.ori_next -= p1.ori;
     }
-#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE
+#else
+    double sin_dtheta = p2.ori.y * p1.ori.x - p2.ori.x * p1.ori.y;
+    double cos_dtheta = p2.ori.x * p1.ori.x + p2.ori.y * p1.ori.y;
+    double torque = 2. * sin_dtheta * cos_dtheta;
+    p1.tau += torque;
+    p2.tau -= torque;
+#endif
+#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE ||defined CONTINUE_DYNAMIC
     p1.n_neighb++;
     p2.n_neighb++;
 #endif
@@ -102,17 +137,27 @@ void nematic_align(Par& p1, Par& p2, const TDomain& domain) {
 
 template <class Par>
 void move_forward(Par& p, double v0, double dtheta) {
+#ifndef CONTINUE_DYNAMIC
   p.ori_next.normalize();
   const double c1 = p.ori_next.x;
   const double s1 = p.ori_next.y;
-
+#else
+  const double c1 = p.ori.x;
+  const double s1 = p.ori.y;
+#endif
   //dtheta = scalar_noise + random_torque
   const double c2 = std::cos(dtheta);
   const double s2 = std::sin(dtheta);
-  p.ori.x = p.ori_next.x = c1 * c2 - s1 * s2;
-  p.ori.y = p.ori_next.y = c1 * s2 + c2 * s1;
+  p.ori.x = c1 * c2 - s1 * s2;
+  p.ori.y = c1 * s2 + c2 * s1;
   p.pos += v0 * p.ori;
-#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE
+#ifndef CONTINUE_DYNAMIC
+  p.ori_next = p.ori;
+#else
+  p.tau = 0.;
+#endif
+
+#if defined RANDOM_FIELD || defined RANDOM_OBSTACLE ||defined CONTINUE_DYNAMIC
   p.n_neighb = 1;
 #endif
 }

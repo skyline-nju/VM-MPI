@@ -54,7 +54,7 @@ LogExporter::~LogExporter() {
     // ReSharper restore CppDeprecatedEntity
     fout << "Finished simulation at " << str << "\n";
     std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
-    fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count()
+    fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count() /tot_proc_
       << " particle time step per second per core\n";
     fout.close();
   }
@@ -231,4 +231,20 @@ TimeAveFeildExporter::~TimeAveFeildExporter() {
   delete[] sum_n_;
   delete[] sum_vx_;
   delete[] sum_vy_;
+}
+
+void exporter::create_folders(int my_rank, MPI_Comm group_comm) {
+  // output setting
+  if (my_rank == 0) {
+    mkdir("data");
+#ifdef _MSC_VER
+    mkdir("data\\snap");
+#else
+    mkdir("data/snap");
+#endif
+  }
+
+#ifdef USE_MPI
+  MPI_Barrier(group_comm);
+#endif
 }

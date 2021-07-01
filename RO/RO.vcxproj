@@ -144,6 +144,9 @@
     <ClInclude Include="communicator2D.h" />
     <ClInclude Include="comn.h" />
     <ClInclude Include="config.h" />
+    <ClInclude Include="dilute_coupling.h" />
+    <ClInclude Include="RO_conti.h" />
+    <ClInclude Include="RO_disconti.h" />
     <ClInclude Include="disorder2D.h" />
     <ClInclude Include="domain2D.h" />
     <ClInclude Include="exporter2D.h" />
@@ -155,8 +158,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="comn.cpp" />
+    <ClCompile Include="dilute_coupling.cpp" />
+    <ClCompile Include="RO_conti.cpp" />
+    <ClCompile Include="RO_disconti.cpp" />
     <ClCompile Include="exporter2D.cpp" />
-    <ClCompile Include="main.cpp" />
     <ClCompile Include="run2D.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

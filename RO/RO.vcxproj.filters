@@ -51,6 +51,15 @@
     <ClInclude Include="vect.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="RO_conti.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RO_disconti.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="dilute_coupling.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="comn.cpp">
@@ -59,10 +68,16 @@
     <ClCompile Include="exporter2D.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="run2D.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="run2D.cpp">
+    <ClCompile Include="RO_conti.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RO_disconti.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="dilute_coupling.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

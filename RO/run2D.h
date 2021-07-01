@@ -146,7 +146,12 @@ void ini_particles(int gl_par_num, std::vector<TPar>& p_arr,
       double angle = seed2 / 180. * PI;
       Vec_2<double> ori0 = Vec_2<double>(cos(angle), sin(angle));
       for (auto& p : p_arr) {
-        p.ori = p.ori_next = ori0;
+        p.ori = ori0;
+#ifndef CONTINUE_DYNAMIC
+        p.ori_next = ori0;
+#else
+        p.tau = 0.;
+#endif
       }
     }
     t_beg = 0;
@@ -158,8 +163,52 @@ void ini_particles(int gl_par_num, std::vector<TPar>& p_arr,
   }
 }
 
-void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
-            double eta, double rho_s, double eps,
-            unsigned long long seed, unsigned long long seed2,
-            int n_step, std::string& ini_mode,
-            MPI_Comm group_comm, MPI_Comm root_comm);
+template <typename UniFunc>
+void run(UniFunc one_step, int n_step,
+         MPI_Comm group_comm,
+         MPI_Comm root_comm) {
+#ifndef USE_MPI
+  for (int i = 1; i <= n_step; i++) {
+    one_step(i);
+  }
+#else
+if (root_comm == MPI_COMM_WORLD) {
+  for (int i = 1; i <= n_step; i++) {
+    one_step(i);
+  }
+} else {
+  int i_step = 1;
+  MPI_Win win_root;
+  int finished_group = 0;
+  int n_group;
+  int my_rank;
+  MPI_Comm_rank(group_comm, &my_rank);
+  if (my_rank == 0) {
+    MPI_Win_create(&i_step, 1, sizeof(int), MPI_INFO_NULL, root_comm, &win_root);
+    MPI_Comm_size(root_comm, &n_group);
+    std::cout << "number of groups: " << n_group << std::endl;
+  }
+  MPI_Bcast(&n_group, 1, MPI_INT, 0, group_comm);
+  while (finished_group < n_group) {
+    one_step(i_step);
+    i_step++;
+    if (i_step > n_step && i_step % 100 == 1) {
+      if (my_rank == 0) {
+        finished_group = 0;
+        for (int j = 0; j < n_group; j++) {
+          int remote_i_step;
+          MPI_Win_lock(MPI_LOCK_SHARED, j, 0, win_root);
+          MPI_Get(&remote_i_step, 1, MPI_INT, j, 0, 1, MPI_INT, win_root);
+          MPI_Win_unlock(j, win_root);
+          if (remote_i_step > n_step) {
+            finished_group++;
+          }
+        }
+      }
+      MPI_Bcast(&finished_group, 1, MPI_INT, 0, group_comm);
+    }
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
+}

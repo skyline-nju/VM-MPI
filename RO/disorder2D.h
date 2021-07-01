@@ -169,7 +169,16 @@ public:
   void add_obstacle(T x, T y);
 
   template <typename TPar>
+  bool within(const TPar& p) const;
+
+#ifndef DILUTE_COUPLING
+  template <typename TPar>
+#ifndef CONTINUE_DYNAMIC
   void scattering(TPar& p, double eps) const;
+#else
+  double scattering(const TPar& p) const;
+#endif
+#endif
 
 private:
   Vec_2<double> half_gl_l_;
@@ -270,8 +279,27 @@ void DiluteScatter::add_obstacle(T x, T y) {
   }
 }
 
+template<typename TPar>
+bool DiluteScatter::within(const TPar& p) const {
+  int ic = get_ic(p);
+  int max_ob = obstacles_[ic].size();
+  bool ret = false;
+  for (int io = 0; io < max_ob; io++) {
+    double dx = p.pos.x - obstacles_[ic][io].x;
+    double dy = p.pos.y - obstacles_[ic][io].y;
+    double dis2 = dx * dx + dy * dy;
+    if (dis2 < 1.) {
+      ret = true;
+      break;
+    }
+  }
+  return ret;
+}
+
+#ifndef DILUTE_COUPLING
 
 template <typename TPar>
+#ifndef CONTINUE_DYNAMIC
 void DiluteScatter::scattering(TPar &p, double eps) const{
   Vec_2<double> scat_vec(0., 0.);
   int ic = get_ic(p);
@@ -289,6 +317,7 @@ void DiluteScatter::scattering(TPar &p, double eps) const{
     }
   }
   if (n_ob > 0) {
+
 #ifdef SCATTER_NORMED
       p.ori_next.x = n_ob * p.ori_next.x + eps * p.n_neighb * scat_vec.x;
       p.ori_next.y = n_ob * p.ori_next.y + eps * p.n_neighb * scat_vec.y;
@@ -299,3 +328,28 @@ void DiluteScatter::scattering(TPar &p, double eps) const{
   }
   p.n_neighb = 1;
 }
+#else
+double DiluteScatter::scattering(const TPar& p) const {
+  double torque = 0.;
+  int ic = get_ic(p);
+  int n_ob = 0;
+  int max_ob = obstacles_[ic].size();
+  for (int io = 0; io < max_ob; io++) {
+    double dx = p.pos.x - obstacles_[ic][io].x;
+    double dy = p.pos.y - obstacles_[ic][io].y;
+    double dis2 = dx * dx + dy * dy;
+    if (dis2 < 1.) {
+      double inv_dis = 1. / sqrt(dis2);
+      dx *= inv_dis;
+      dy *= inv_dis;
+      torque += dy * p.ori.x - dx * p.ori.y;
+      n_ob++;
+    }
+  }
+  if (n_ob > 0) {
+    torque /= n_ob;
+  }
+  return torque;
+}
+#endif
+#endif

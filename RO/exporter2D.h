@@ -575,4 +575,6 @@ void TimeAveFeildExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   }
 }
 
+void create_folders(int my_rank, MPI_Comm group_comm);
+
 }

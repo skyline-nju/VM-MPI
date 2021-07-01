@@ -21,6 +21,8 @@ public:
 
   UniNode(const double *buf) : TPar(buf), next(nullptr) {}
 
+  UniNode(const float* buf) : TPar(buf), next(nullptr) {}
+
   template <typename TRan, typename TVec>
   UniNode(TRan &myran, const TVec &l, const TVec &origin)
     : TPar(myran, l, origin), next(nullptr) {}
@@ -56,6 +58,7 @@ public:
 
   BiNode(const double *buf) : TPar(buf), prev(nullptr), next(nullptr) {}
 
+  BiNode(const float* buf) : TPar(buf), prev(nullptr), next(nullptr) {}
 
   template <typename TRan, typename TVec>
   BiNode(TRan &myran, const TVec &l, const TVec &origin)
