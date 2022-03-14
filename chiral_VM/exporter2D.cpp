@@ -55,7 +55,7 @@ LogExporter::~LogExporter() {
     // ReSharper restore CppDeprecatedEntity
     fout << "Finished simulation at " << str << "\n";
     std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
-    fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count()
+    fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count() /tot_proc_
       << " particle time step per second per core\n";
     fout.close();
   }
@@ -78,22 +78,10 @@ void LogExporter::record(int i_step) {
 OrderParaExporter_2::OrderParaExporter_2(const std::string& outfile,
                                          int start, int n_step, int sep,
                                          const Vec_2<double>& gl_l,
-                                         MPI_Comm group_comm,
-                                         int use_sub_boxes)
+                                         MPI_Comm group_comm)
   : ExporterBase(start, n_step, sep, group_comm){
   if (my_rank_ == 0) {
     fout_.open(outfile);
-  }
-
-  if (use_sub_boxes && gl_l.x == gl_l.y && (int(gl_l.x) % 32) == 0) {
-    flag_phi_box_ = true;
-    for (int i = 32; i <= int(gl_l.x); i *= 2) {
-      L_arr_.push_back(i);
-    }
-    max_cells_ = int(int(gl_l.x * gl_l.y) / (32 * 32) / tot_proc_ * 1.5);
-  } else {
-    flag_phi_box_ = false;
-    max_cells_ = 0;
   }
 }
 
@@ -103,98 +91,84 @@ OrderParaExporter_2::~OrderParaExporter_2() {
   }
 }
 
-void OrderParaExporter_2::coarse_grain(int** n_gl,
-                                       double** svx_gl, double** svy_gl,
-                                       int& nx, int& ny) const {
-  if (nx % 2 != 0 || ny % 2 != 0) {
-    std::cout << "Error when coarse grain with nx = " 
-              << nx << ", ny = " << ny << std::endl;
-    exit(2);
-  }
-  int nx_new = nx / 2;
-  int ny_new = ny / 2;
-  int* n_gl_new = new int[nx_new * ny_new]{};
-  double* svx_gl_new = new double[nx_new * ny_new]{};
-  double* svy_gl_new = new double[nx_new * ny_new]{};
-  for (int j = 0; j < ny_new; j++) {
-    int j_nx_new = j * nx_new;
-    int iy_0_nx = j * 2 * nx;
-    int iy_1_nx = iy_0_nx + nx;
-    for (int i = 0; i < nx_new; i++) {
-      int idx_new = i + j_nx_new;
-      int ix_0 = i * 2;
-      int ix_1 = ix_0 + 1;
-      int idx0 = ix_0 + iy_0_nx;
-      int idx1 = ix_1 + iy_0_nx;
-      int idx2 = ix_0 + iy_1_nx;
-      int idx3 = ix_1 + iy_1_nx;
-      n_gl_new[idx_new] = (*n_gl)[idx0] + (*n_gl)[idx1] + (*n_gl)[idx2] + (*n_gl)[idx3];
-      svx_gl_new[idx_new] = (*svx_gl)[idx0] + (*svx_gl)[idx1] + (*svx_gl)[idx2] + (*svx_gl)[idx3];
-      svy_gl_new[idx_new] = (*svy_gl)[idx0] + (*svy_gl)[idx1] + (*svy_gl)[idx2] + (*svy_gl)[idx3];
+void OrderParaExporter_2::dump(int i_step,
+                               const std::vector<BiNode<Bird_2>>& p_arr,
+                               int gl_np) {
+  if (need_export(i_step)) {
+    double my_v[2]{};
+    for (const auto& p : p_arr) {
+      my_v[0] += p.ori.x;
+      my_v[1] += p.ori.y;
     }
-  }
-  delete[](*n_gl);
-  delete[](*svx_gl);
-  delete[](*svy_gl);
-  *n_gl = n_gl_new;
-  *svx_gl = svx_gl_new;
-  *svy_gl = svy_gl_new;
-  nx = nx_new;
-  ny = ny_new;
-}
-
-double OrderParaExporter_2::get_mean_phi(int size, const int* n_gl,
-                                         const double* svx_gl, const double* svy_gl, 
-                                         bool normed) const {
-  double phi_sum = 0;
-  int count = 0;
-  for (int i = 0; i < size; i++) {
-    double vx_m = svx_gl[i] / n_gl[i];
-    double vy_m = svy_gl[i] / n_gl[i];
-    double phi = std::sqrt(vx_m * vx_m + vy_m * vy_m);
-    if (normed) {
-      phi_sum += phi * n_gl[i];
-      count += n_gl[i];
-    } else {
-      phi_sum += phi;
-    }
-   
-  }
-  double phi_mean;
-  if (normed) {
-    phi_mean = phi_sum / count;
-  } else {
-    phi_mean = phi_sum / size;
-  }
-  return phi_mean;
-}
-
-void OrderParaExporter_2::cal_mean_phi(int size, const int* n_gl, 
-                                       const double* svx_gl, const double* svy_gl,
-                                       double& phi1, double& phi2) {
-  phi1 = phi2 = 0;
-  int count = 0;
-  for (int i = 0; i < size; i++) {
-    double vx_m = svx_gl[i] / n_gl[i];
-    double vy_m = svy_gl[i] / n_gl[i];
-    double phi = std::sqrt(vx_m * vx_m + vy_m * vy_m);
-    phi1 += phi * n_gl[i];
-    count += n_gl[i];
-    phi2 += phi;
-  }
-  phi1 /= count;
-  phi2 /= size;
-}
-
-RhoxExporter::~RhoxExporter() {
-  delete[] buf_;
+    double gl_v[2]{};
 #ifdef USE_MPI
-  MPI_File_close(&fh_);
+    MPI_Reduce(my_v, gl_v, 2, MPI_DOUBLE, MPI_SUM, 0, comm_);
 #else
-  fout_.close();
+    gl_v[0] = my_v[0];
+    gl_v[1] = my_v[1];
 #endif
+    if (my_rank_ == 0) {
+      gl_v[0] /= gl_np;
+      gl_v[1] /= gl_np;
+    }
+    double m = std::sqrt(gl_v[0] * gl_v[0] + gl_v[1] * gl_v[1]);
+    double theta = std::atan2(gl_v[1], gl_v[0]);
+
+    if (my_rank_ == 0) {
+      fout_ << std::fixed << std::setw(16) << std::setprecision(10)
+        << m << "\t" << theta << "\t" << std::endl;
+    }
+  }
 }
 
+void SnapExporter::dump(int i_step, const std::vector<BiNode<Bird_2>>& p_arr) {
+  if (need_export(i_step)) {
+    char filename[200];
+    snprintf(filename, 200, "%s_%08d.bin", file_prefix_.c_str(), t_beg_ + i_step);
+    count_++;
+    int my_n = p_arr.size();
+#ifdef USE_MPI
+    MPI_File_open(comm_, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE,
+                  MPI_INFO_NULL, &fh_);
+    int my_rank;
+    MPI_Comm_rank(comm_, &my_rank);
+    int tot_proc;
+    MPI_Comm_size(comm_, &tot_proc);
+    int my_origin;
+    int* origin_arr = new int[tot_proc];
+    int* n_arr = new int[tot_proc];
+    MPI_Gather(&my_n, 1, MPI_INT, n_arr, 1, MPI_INT, 0, comm_);
+    if (my_rank == 0) {
+      origin_arr[0] = 0;
+      for (int i = 1; i < tot_proc; i++) {
+        origin_arr[i] = origin_arr[i - 1] + n_arr[i - 1];
+      }
+    }
+    MPI_Scatter(origin_arr, 1, MPI_INT, &my_origin, 1, MPI_INT, 0, comm_);
+    delete[] n_arr;
+    delete[] origin_arr;
+
+    MPI_Offset offset = my_origin * 3 * sizeof(float);
+#else
+    fout_.open(filename, std::ios::binary);
+#endif
+    float* buf = new float[3 * my_n];
+    for (int j = 0; j < my_n; j++) {
+      buf[j * 3 + 0] = p_arr[j].pos.x;
+      buf[j * 3 + 1] = p_arr[j].pos.y;
+      buf[j * 3 + 2] = p_arr[j].get_theta();
+    }
+
+#ifdef USE_MPI
+    MPI_File_write_at(fh_, offset, buf, 3 * my_n, MPI_FLOAT, MPI_STATUSES_IGNORE);
+    MPI_File_close(&fh_);
+#else
+    fout_.write((char*)buf, sizeof(float) * my_n * 3);
+    fout_.close();
+#endif
+    delete[] buf;
+  }
+}
 
 FeildExporter::~FeildExporter() {
 #ifdef USE_MPI
@@ -228,26 +202,17 @@ void FeildExporter::write_data(const float* rho, const float* vx, const float* v
   idx_frame_++;
 }
 
-TimeAveFeildExporter::~TimeAveFeildExporter() {
-  delete[] sum_n_;
-  delete[] sum_vx_;
-  delete[] sum_vy_;
-}
-
-void exporter::create_folders(const char* folder, int my_rank, MPI_Comm group_comm) {
+void exporter::create_folders(int my_rank, MPI_Comm group_comm) {
   // output setting
   if (my_rank == 0) {
-//     mkdir("data");
-// #ifdef _MSC_VER
-//     mkdir("data\\snap");
-// #else
-//     mkdir("data/snap");
-// #endif
-  mkdir(folder);
-  char snap_folder[255];
-  snprintf(snap_folder, 255, "%ssnap", folder);
-  mkdir(snap_folder);
+    mkdir("data");
+#ifdef _MSC_VER
+    mkdir("data\\snap");
+#else
+    mkdir("data/snap");
+#endif
   }
+
 #ifdef USE_MPI
   MPI_Barrier(group_comm);
 #endif

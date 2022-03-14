@@ -163,7 +163,7 @@ public:
   template <class TDomain, class TGrid, class TRan>
   DiluteScatter(const TDomain& dm, const TGrid& grid,
                 int n_ob, TRan& myran,
-                MPI_Comm group_comm, const char* outfile);
+                MPI_Comm group_comm, const char* outfile=nullptr);
   
   template <typename T>
   void add_obstacle(T x, T y);
@@ -201,9 +201,11 @@ DiluteScatter::DiluteScatter(const TDomain& dm, const TGrid& grid,
       buf[2 * i] = gl_l_.x * myran.doub();
       buf[2 * i + 1] = gl_l_.y * myran.doub();
     }
-    std::ofstream fout(outfile, std::ios::binary);
-    fout.write((char*)buf, sizeof(double) * n_ob * 2);
-    fout.close();
+    if (outfile) {
+      std::ofstream fout(outfile, std::ios::binary);
+      fout.write((char*)buf, sizeof(double) * n_ob * 2);
+      fout.close();
+    }
   }
 #ifdef USE_MPI
   MPI_Bcast(buf, n_ob * 2, MPI_DOUBLE, 0, group_comn);
@@ -346,9 +348,11 @@ double DiluteScatter::scattering(const TPar& p) const {
       n_ob++;
     }
   }
+#ifndef SCATTER_NORMED
   if (n_ob > 0) {
     torque /= n_ob;
   }
+#endif
   return torque;
 }
 #endif

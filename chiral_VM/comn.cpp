@@ -22,7 +22,7 @@ void mkdir(const char *folder) {
 #endif
   {
     char command[100];
-    snprintf(command, 100, "mkdir -p %s", folder);
+    snprintf(command, 100, "mkdir %s", folder);
     if (system(command))
       cout << "create folder: " << folder << " successfully" << endl;
   } else

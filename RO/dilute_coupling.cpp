@@ -67,8 +67,8 @@ void run_dilute_coupling(int gl_par_num, const Vec_2<double>& gl_l,
   exporter::LogExporter log(logfile, 0, n_step * 2, 10000, gl_par_num, group_comm);
   exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step * 2, 100, gl_l, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step * 2, 10000, t_beg, group_comm);
-  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm, 8);
-  exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm, 8);
+  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm, 4);
+  exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm, 4);
 
   // cal force
   auto f1 = [](node_t* p1, node_t* p2) {
@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Error, argc = " << argc << std::endl;
     exit(1);
   }
-  int n_group = tot_proc;
+  int n_group = (argc-1)/arg_size;
   int cores_per_group = tot_proc / n_group;
   MPI_Group group, gl_group, root_group;
   MPI_Comm group_comm, root_comm;
@@ -176,15 +176,15 @@ int main(int argc, char* argv[]) {
   int my_group = 0;
 #endif
 
-  double Lx = atof(argv[1]);
-  double Ly = atof(argv[2]);
-  double eta = atof(argv[3]);
-  double eps = atof(argv[4]);
-  double rho_s = atof(argv[5]);
-  unsigned long long seed1 = atoi(argv[6]) + my_group;
-  unsigned long long seed2 = atoi(argv[7]);
-  int n_step = atof(argv[8]);
-  std::string ini_mode = argv[9];
+  double Lx = atof(argv[1+idx_beg]);
+  double Ly = atof(argv[2+idx_beg]);
+  double eta = atof(argv[3+idx_beg]);
+  double eps = atof(argv[4+idx_beg]);
+  double rho_s = atof(argv[5+idx_beg]);
+  unsigned long long seed1 = atoi(argv[6+idx_beg]);
+  unsigned long long seed2 = atoi(argv[7+idx_beg]);
+  int n_step = atof(argv[8+idx_beg]);
+  std::string ini_mode = argv[9+idx_beg];
 
   Vec_2<double> gl_l(Lx, Ly);
   double rho0 = 1.;

@@ -12,7 +12,7 @@ void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_
   }
   my_par_num = my_par_num;
   if (tot_proc > 1) {
-    my_par_num_max = 20 * my_par_num;
+    my_par_num_max = 10 * my_par_num;
   } else {
     my_par_num_max = 1.1 * my_par_num;
   }

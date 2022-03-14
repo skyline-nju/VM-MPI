@@ -4,10 +4,10 @@
 #include "disorder2D.h"
 #include "RO_conti.h"
 
-void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
-            double eta, double rho_s,
+void run_RO(int gl_par_num, const Vec_2<double> &gl_l,
+            double eta, double rho_s, double eps,
             unsigned long long seed, unsigned long long seed2,
-            int n_step, std::string& ini_mode,
+            int n_step, std::string &ini_mode,
             MPI_Comm group_comm, MPI_Comm root_comm) {
   typedef BiNode<Bird_2> node_t;
   int my_rank = 0;
@@ -32,27 +32,26 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   Communicator_2 comm(dm, grid, rho_0, 40.);
 #endif
 
-  exporter::create_folders(my_rank, group_comm);
+  char folder[256] = "/scratch03.local/yduan/RO_conti_unnormalized/PD1024/";
+  exporter::create_folders(folder, my_rank, group_comm);
 
-  char logfile[200];
-  char phifile[200];
-  char snapfile[200];
-  char time_ave_f1[200];
-  char field_f1[200];
-  char scatter_f[200];
-  char basename[100];
+  char logfile[255];
+  char phifile[255];
+  char snapfile[255];
+  char time_ave_f1[255];
+  char field_f1[255];
+  char scatter_f[255];
+  char basename[255];
   if (gl_l.x == gl_l.y) {
-    snprintf(basename, 100, "%g_%.3f_%.5f_%.3f_%llu_%03llu", gl_l.x, eta, rho_s, rho_0, seed, seed2);
+    snprintf(basename, 255, "%g_%.3f_%.3f_%.3f_%.3f_%llu_%03llu", gl_l.x, eta, rho_s, eps, rho_0, seed, seed2);
   } else {
-    snprintf(basename, 100, "%g_%g_%.3f_%.5f_%.3f_%llu_%03llu", gl_l.x, gl_l.y, eta, rho_s, rho_0, seed, seed2);
+    snprintf(basename, 255, "%g_%g_%.3f_%.3f_%.3f_%.3f_%llu_%03llu", gl_l.x, gl_l.y, eta, rho_s, eps, rho_0, seed, seed2);
   }
-  snprintf(scatter_f, 200, "data/scatter_%s.bin", basename);
-
 
   // initialize random obstacles
   int n_ob = round(rho_s * gl_l.x * gl_l.y);
   Ranq1 myran(seed + my_rank);
-  DiluteScatter disorder(dm, grid, n_ob, myran, group_comm, scatter_f);
+  DiluteScatter disorder(dm, grid, n_ob, myran, group_comm);
 
   // initialize the location and orientation of particles
   int t_beg;
@@ -62,29 +61,30 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   int ave_t_beg1 = t_beg >= ave_t_beg ? 0 : ave_t_beg - t_beg;
   int ave_dt1 = 100000;
   int field_t_beg1 = 0;
-  int field_dt1 = 10000;
-  snprintf(logfile, 200, "data/RO_%s_%d.log", basename, t_beg);
-  snprintf(phifile, 200, "data/RO_%s_%d.dat", basename, t_beg);
-  snprintf(snapfile, 200, "data/snap/RO_%s", basename);
-  snprintf(field_f1, 200, "data/RO_field_%s_%d_%d.bin", basename, field_dt1, t_beg);
-  snprintf(time_ave_f1, 200, "data/RO_ave_%s_%d_%d.bin", basename, ave_dt1, t_beg);
+  int field_dt1 = 100000;
+
+  snprintf(logfile, 256, "%sRO_%s_%d.log", folder, basename, t_beg);
+  snprintf(phifile, 256, "%sRO_%s_%d.dat", folder, basename, t_beg);
+  snprintf(snapfile, 256, "%ssnap/RO_%s", folder, basename);
+  snprintf(field_f1, 256, "%sRO_field_%s_%d_%d.bin", folder, basename, field_dt1, t_beg);
+  // snprintf(time_ave_f1, 256, "data/RO_ave_%s_%d_%d.bin", basename, ave_dt1, t_beg);
 
   exporter::LogExporter log(logfile, 0, n_step * 2, 10000, gl_par_num, group_comm);
   exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step * 2, 100, gl_l, group_comm);
   exporter::SnapExporter snap_ex(snapfile, 0, n_step * 2, 10000, t_beg, group_comm);
-  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm, 8);
-  exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm, 8);
+  exporter::FeildExporter field_ex1(field_f1, field_t_beg1, n_step * 2, field_dt1, grid, dm, 4);
+  // exporter::TimeAveFeildExporter ave_ex1(time_ave_f1, ave_t_beg1, n_step * 2, ave_dt1, grid, dm, 4);
 
   // cal force
-  auto f1 = [](node_t* p1, node_t* p2) {
+  auto f1 = [](node_t *p1, node_t *p2) {
     polar_align(*p1, *p2, p2->pos - p1->pos);
   };
 
-  auto f2 = [&dm](node_t* p1, node_t* p2) {
+  auto f2 = [&dm](node_t *p1, node_t *p2) {
     polar_align(*p1, *p2, dm);
   };
 
-  auto f3 = [](node_t* p1, node_t* p2, const Vec_2<double>& offset) {
+  auto f3 = [](node_t *p1, node_t *p2, const Vec_2<double> &offset) {
     polar_align(*p1, *p2, p2->pos - p1->pos + offset);
   };
 
@@ -99,13 +99,13 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   // integrate
   double eta2PI = eta * 2.0 * PI;
   Ranq2 myran2(myran.int64() + seed2 + t_beg);
-  auto single_move = [h, sqrt_24Dh, v0h, &myran2, &dm, &disorder](node_t& p) {
+  auto single_move = [h, sqrt_24Dh, v0h, &myran2, &dm, &disorder, eps](node_t &p) {
     double torque = 0.;
     if (p.n_neighb > 1) {
       torque += p.tau / (p.n_neighb - 1.);
     }
 #ifdef RANDOM_OBSTACLE
-    torque += disorder.scattering(p);
+    torque += disorder.scattering(p) * eps;
 #endif
 
     double dtheta = torque * h + (myran2.doub() - 0.5) * sqrt_24Dh;
@@ -119,11 +119,11 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
     log.fout << "particle number=" << gl_par_num << std::endl;
   }
 
-  auto out = [&log, &order_ex, gl_par_num, &snap_ex, &ave_ex1, &field_ex1](int i, std::vector<node_t>& par_arr) {
+  auto out = [&log, &order_ex, gl_par_num, &snap_ex, &field_ex1](int i, std::vector<node_t> &par_arr) {
     log.record(i);
     order_ex.dump(i, par_arr, gl_par_num);
     snap_ex.dump(i, par_arr);
-    ave_ex1.dump(i, par_arr);
+    // ave_ex1.dump(i, par_arr);
     field_ex1.dump(i, par_arr);
   };
 
@@ -143,25 +143,24 @@ void run_RO(int gl_par_num, const Vec_2<double>& gl_l,
   run(run_one_step, n_step, group_comm, root_comm);
 }
 
-
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
   int my_rank, tot_proc;
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
 
-  int arg_size = 8;
+  int arg_size = 2;
   if ((argc - 1) % arg_size != 0) {
     std::cout << "Error, argc = " << argc << std::endl;
     exit(1);
   }
-  int n_group = tot_proc / 4;
+  int n_group = 4;
   int cores_per_group = tot_proc / n_group;
   MPI_Group group, gl_group, root_group;
   MPI_Comm group_comm, root_comm;
-  int* ranks = new int[cores_per_group];  // rank of processer belong to the same group
-  int* root_ranks = new int[n_group];     // rank of root processer of each group
+  int *ranks = new int[cores_per_group]; // rank of processer belong to the same group
+  int *root_ranks = new int[n_group];    // rank of root processer of each group
   int my_group = my_rank / cores_per_group;
   for (int i = 0; i < cores_per_group; i++) {
     ranks[i] = i + my_group * cores_per_group;
@@ -182,19 +181,20 @@ int main(int argc, char* argv[]) {
   int my_group = 0;
 #endif
 
-  double Lx = atof(argv[1]);
-  double Ly = atof(argv[2]);
-  double eta = atof(argv[3]);
-  double rho_s = atof(argv[4]);
-  unsigned long long seed1 = atoi(argv[5]) + my_group;
-  unsigned long long seed2 = atoi(argv[6]);
-  int n_step = atof(argv[7]);
-  std::string ini_mode = argv[8];
+  double Lx = 1024;
+  double Ly = 1024;
+  double eta = atof(argv[idx_beg + 1]);
+  double rho_s = atof(argv[idx_beg + 2]);
+  double eps = 0.2;
+  unsigned long long seed1 = 123;
+  unsigned long long seed2 = 361;
+  int n_step = 2000000;
+  std::string ini_mode = "rand";
 
   Vec_2<double> gl_l(Lx, Ly);
   double rho0 = 1.;
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
-  run_RO(gl_par_num, gl_l, eta, rho_s, seed1, seed2, n_step, ini_mode, group_comm, root_comm);
+  run_RO(gl_par_num, gl_l, eta, rho_s, eps, seed1, seed2, n_step, ini_mode, group_comm, root_comm);
 
 #ifdef USE_MPI
   delete[] ranks;
