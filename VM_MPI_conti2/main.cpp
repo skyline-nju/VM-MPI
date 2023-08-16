@@ -41,16 +41,17 @@ int main(int argc, char* argv[]) {
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
   int idx_beg = my_group * arg_size;
-  double Lx = 3600;
-  double Ly = 5120;
+  double Lx = 100;
+  double Ly = 200;
+
   double D = atof(argv[1 + idx_beg]);
   double rho0 = atof(argv[2 + idx_beg]);
+  unsigned long long seed = atoi(argv[3 + idx_beg]);
+  std::string ini_mode = argv[4 + idx_beg];
+//#endif
   double v0 = 1.0;
   double h = 0.1;
-  unsigned long long seed = atoi(argv[3 + idx_beg]);
-  int n_step = 100000000;
-  std::string ini_mode = argv[4 + idx_beg];
-
+  int n_step = 100000;
   Vec_2<double> gl_l(Lx, Ly);
   int snap_dt = 10000;
   int field_dt = 10000;

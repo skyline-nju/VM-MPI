@@ -12,6 +12,7 @@
 *.dat
 *.bin
 .vscode/
+data/
 
 # Build results
 [Dd]ebug/

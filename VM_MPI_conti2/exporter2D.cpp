@@ -28,7 +28,13 @@ exporter::LogExporter::LogExporter(const std::string& outfile, int start, int n_
     t_start_ = std::chrono::system_clock::now();
     auto start_time = std::chrono::system_clock::to_time_t(t_start_);
     char str[100];
-    std::strftime(str, 100, "%c", std::localtime(&start_time));
+    tm now_time;
+#ifdef _MSC_VER
+    localtime_s(&now_time, &start_time);
+#else
+    localtime_r(&start_time, &now_time);
+#endif
+    std::strftime(str, 100, "%c", &now_time);
     fout << "Started simulation at " << str << "\n";
 #ifdef USE_MPI
   }
@@ -44,9 +50,13 @@ exporter::LogExporter::~LogExporter() {
     const auto t_now = std::chrono::system_clock::now();
     auto end_time = std::chrono::system_clock::to_time_t(t_now);
     char str[100];
-    // ReSharper disable CppDeprecatedEntity
-    std::strftime(str, 100, "%c", std::localtime(&end_time));
-    // ReSharper restore CppDeprecatedEntity
+    tm now_time;
+#ifdef _MSC_VER
+    localtime_s(&now_time, &end_time);
+#else
+    localtime_r(&end_time, &now_time);
+#endif
+    std::strftime(str, 100, "%c", &now_time);
     fout << "Finished simulation at " << str << "\n";
     std::chrono::duration<double> elapsed_seconds = t_now - t_start_;
     fout << "speed=" << std::scientific << step_count_ * double(n_par_) / elapsed_seconds.count()

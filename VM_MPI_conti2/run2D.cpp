@@ -41,7 +41,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   double v0h = v0 * h;
 
   // Vec_2<int> proc_size = decompose_domain(gl_l, group_comm);
-  Vec_2<int> proc_size = Vec_2<int>(1, 32);
+  Vec_2<int> proc_size = Vec_2<int>(1, 2);
   PeriodicDomain_2 dm(gl_l, proc_size, group_comm);
   Grid_2 grid(dm, r_cut);
   CellListNode_2<node_t> cl(dm, grid);
@@ -85,8 +85,14 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   // output setting
   char folder[255];
   char snapfolder[255];
+#ifdef _MSC_VER
+  snprintf(folder, 255, "..\\data\\%g_%g\\", gl_l.x, gl_l.y);
+  snprintf(snapfolder, 255, "%ssnap\\", folder);
+
+#else
   snprintf(folder, 255, "/scratch03.local/yduan/wide_band/%g_%g/", gl_l.x, gl_l.y);
   snprintf(snapfolder, 255, "%ssnap/", folder);
+#endif
   if (my_rank == 0) {
     mkdir(folder);
     mkdir(snapfolder);
