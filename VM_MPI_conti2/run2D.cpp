@@ -41,7 +41,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   double v0h = v0 * h;
 
   // Vec_2<int> proc_size = decompose_domain(gl_l, group_comm);
-  Vec_2<int> proc_size = Vec_2<int>(1, 2);
+  Vec_2<int> proc_size = Vec_2<int>(1, tot_proc);
   PeriodicDomain_2 dm(gl_l, proc_size, group_comm);
   Grid_2 grid(dm, r_cut);
   CellListNode_2<node_t> cl(dm, grid);
@@ -141,6 +141,11 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
     field_ex.dump(i, par_arr);
   };
 
+
+  double width = 100;
+  double x_band = get_band_location(p_arr, dm);
+  double x_left = get_left_edge(x_band, width, dm);
+
   // run
 
   bool thick_shell = v0 > 1.;
@@ -150,6 +155,11 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
     for (int i = 1; i <= n_step; i++) {
       cal_force(p_arr, cl, comm, for_all_pair_force);
       integrate2(p_arr, cl, single_move, comm);
+      if (i % 10 == 0) {
+        x_band = get_band_location(p_arr, dm);
+        x_left = get_left_edge(x_band, width, dm);
+      }
+      uniformize_gas(p_arr, cl, dm, myran, x_left, width, rho_0);
       out(i, p_arr);
     }
   } else {
@@ -166,6 +176,11 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
     while (finished_group < n_group) {
       cal_force(p_arr, cl, comm, for_all_pair_force);
       integrate2(p_arr, cl, single_move, comm);
+      if (i_step % 10 == 0) {
+        x_band = get_band_location(p_arr, dm);
+        x_left = get_left_edge(x_band, width, dm);
+      }
+      uniformize_gas(p_arr, cl, dm, myran, x_left, width, rho_0);
       out(i_step, p_arr);
       i_step++;
       if (i_step > n_step && i_step % 100 == 1) {

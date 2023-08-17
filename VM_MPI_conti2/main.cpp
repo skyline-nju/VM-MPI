@@ -41,8 +41,8 @@ int main(int argc, char* argv[]) {
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
   int idx_beg = my_group * arg_size;
-  double Lx = 100;
-  double Ly = 200;
+  double Lx = 1200;
+  double Ly = 320;
 
   double D = atof(argv[1 + idx_beg]);
   double rho0 = atof(argv[2 + idx_beg]);
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 //#endif
   double v0 = 1.0;
   double h = 0.1;
-  int n_step = 100000;
+  int n_step = 10000;
   Vec_2<double> gl_l(Lx, Ly);
   int snap_dt = 10000;
   int field_dt = 10000;
@@ -60,5 +60,6 @@ int main(int argc, char* argv[]) {
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
 
   run(gl_par_num, gl_l, D, h, v0, n_step, ini_mode, seed, snap_dt, field_dt, field_dx, group_comm, root_comm);
+
   MPI_Finalize();
 }

@@ -158,16 +158,22 @@ void shuffle(T *a, int n, MyRan &myran) {
   }
 }
 
-template<class T, class MyRan>
-void shuffle(std::vector<T> &arr, MyRan &myran) {
+template<class T, class Ran>
+void shuffle(std::vector<T>& arr, Ran& myran, int n_shuffle) {
   const unsigned int n = arr.size();
-  for (unsigned int i = n - 1; i > 0; i--) {
+  for (unsigned int i = n - 1; i > n - n_shuffle; i--) {
     unsigned int j = myran.doub() * (i + 1);
     //auto j = myran.int64() % (i + 1);
     T tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
   }
+}
+
+template<class T, class MyRan>
+void shuffle(std::vector<T> &arr, MyRan &myran) {
+  const unsigned int n_shuffle = arr.size();
+  shuffle(arr, myran, n_shuffle);
 }
 
 template<class T, class Myran, class UniFunc>

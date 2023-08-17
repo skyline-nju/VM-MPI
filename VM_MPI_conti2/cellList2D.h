@@ -207,6 +207,11 @@ public:
 
   void add_node_thick_shell(TNode& p) { p.append_at_front(&head_[get_ic_thick_shell(p)]); }
 
+  void remove_node(TNode& p, int idx_c);
+
+  void remove_node(TNode& p) { remove_node(p, get_ic(p)); }
+
+
   void clear(const Vec2i &first, const Vec2i &last);
 
   void replace(TNode &p1, const TNode &p2);
@@ -383,14 +388,19 @@ void CellListNode_2<TNode>::recreate(std::vector<TNode>& p_arr, bool thick_shell
 
 template<typename TNode>
 void CellListNode_2<TNode>::update(TNode& p, int ic_old, int ic_new) {
-  if (&p == head_[ic_old]) {
-    p.break_away(&head_[ic_old]);
-  } else {
-    p.break_away();
-  }
+  remove_node(p, ic_old);
   p.append_at_front(&head_[ic_new]);
 }
 
+
+template<typename TNode>
+void CellListNode_2<TNode>::remove_node(TNode& p, int idx_c) {
+  if (&p == head_[idx_c]) {
+    p.break_away(&head_[idx_c]);
+  } else {
+    p.break_away();
+  }
+}
 
 template <typename TNode>
 template <typename UniFunc>
