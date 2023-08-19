@@ -41,8 +41,8 @@ int main(int argc, char* argv[]) {
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
   int idx_beg = my_group * arg_size;
-  double Lx = 3600;
-  double Ly = 5120;
+  double Lx = 1200;
+  double Ly = 320;
 
   double D = atof(argv[1 + idx_beg]);
   double rho0 = atof(argv[2 + idx_beg]);

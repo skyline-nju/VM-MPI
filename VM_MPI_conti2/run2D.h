@@ -165,9 +165,36 @@ void tag_particles(std::vector<int>& par_idx, double xmin, double width, const s
   } 
 }
 
-template <typename TNode, typename TDomain, typename TRan>
-void equili_tagged_par(std::vector<int>& par_idx, double xmin, double width, TRan& myran, std::vector<TNode>& p_arr,
-                     const TDomain& dm, CellListNode_2<TNode>& cl) {
+template <typename TNode, typename TDomain>
+void tag_remove_particles(std::vector<int>& par_idx, double xmin, double width, std::vector<TNode>& p_arr, const TDomain& dm, 
+                          CellListNode_2<TNode>& cl) {
+  int np = p_arr.size();
+  double Lx = dm.gl_l().x;
+  double xmax = xmin + width;
+  if (xmax >= Lx)
+    xmax -= Lx;
+  if (xmin < xmax) {
+    for (int i = 0; i < np; i++) {
+      double x = p_arr[i].pos.x;
+      if (x > xmin && x <= xmax) {
+        par_idx.push_back(i);
+        cl.remove_node(p_arr[i]);
+      }
+    }
+  } else {
+    for (int i = 0; i < np; i++) {
+      double x = p_arr[i].pos.x;
+      if (x > xmin || x <= xmax) {
+        par_idx.push_back(i);
+        cl.remove_node(p_arr[i]);
+      }
+    }
+  }
+}
+
+
+template <typename TDomain, typename TRan>
+int get_new_par_num(const std::vector<int>& par_idx, TRan& myran, const TDomain& dm) {
   int my_np = par_idx.size();
   int tot_np;
   MPI_Reduce(&my_np, &tot_np, 1, MPI_INT, MPI_SUM, 0, dm.comm());
@@ -187,6 +214,30 @@ void equili_tagged_par(std::vector<int>& par_idx, double xmin, double width, TRa
 
   int new_np;
   MPI_Scatter(np_arr, 1, MPI_INT, &new_np, 1, MPI_INT, 0, dm.comm());
+  delete[] np_arr;
+  return new_np;
+}
+
+
+template<typename TRan, typename TDomain>
+void get_new_pos_ori(Vec_2<double>& pos, Vec_2<double>& ori, TRan& myran, const TDomain& dm, double x_left, double w) {
+  double theta = myran.doub() * PI * 2;
+  ori.x = std::cos(theta);
+  ori.y = std::sin(theta);
+  pos.x = x_left + w * myran.doub();
+  if (pos.x >= dm.gl_l().x) {
+    pos.x -= dm.gl_l().x;
+  }
+  pos.y = dm.origin().y + dm.l().y * myran.doub();
+}
+
+
+template <typename TNode, typename TDomain, typename TRan>
+void equili_tagged_par(std::vector<int>& par_idx, double xmin, double width, TRan& myran, std::vector<TNode>& p_arr,
+                     const TDomain& dm, CellListNode_2<TNode>& cl) {
+  int my_np = par_idx.size();
+  int new_np = get_new_par_num(par_idx, myran, dm);
+
   //std::cout << "excess particle number: " << my_np - new_np << std::endl;
 
   if (my_np > new_np) {
@@ -206,46 +257,63 @@ void equili_tagged_par(std::vector<int>& par_idx, double xmin, double width, TRa
   } else if (my_np < new_np) {
     int np_old = p_arr.size();
     do {
-      double theta = myran.doub() * PI * 2;
-      Vec_2<double> ori(std::cos(theta), std::sin(theta));
-      Vec_2<double> pos;
-      pos.x = xmin + width * myran.doub();
-      if (pos.x >= dm.gl_l().x) {
-        pos.x -= dm.gl_l().x;
-      }
-      pos.y = dm.origin().y + dm.l().y * myran.doub();
+      Vec_2<double> pos, ori;
+      get_new_pos_ori(pos, ori, myran, dm, xmin, width);
       p_arr.emplace_back(pos, ori);
       cl.add_node(p_arr.back());
     } while (p_arr.size() - np_old < new_np - my_np);
     //std::cout << p_arr.size() - np_old << " particles added" << std::endl;
   }
-
-  delete[] np_arr;
 }
+
+
+
 
 template <typename TNode, typename TDomain, typename TRan>
 void uniformize_gas(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, const TDomain& dm, TRan& myran, 
                     double x_left, double tagged_region_width, double rho_0) {
   double ly = dm.l().y;
   std::vector<int> tagged_par_idx;
-  //double x_band = get_band_location(p_arr, dm);
-  //double x_left = get_left_edge(x_band, tagged_region_width, dm);
   int n_res = tagged_region_width * ly * rho_0 * 4;
   tagged_par_idx.reserve(n_res);
   tag_particles(tagged_par_idx, x_left, tagged_region_width, p_arr, dm);
   equili_tagged_par(tagged_par_idx, x_left, tagged_region_width, myran, p_arr, dm, cl);
-  //std::vector<int> tagged_par_idx2;
-  //tagged_par_idx2.reserve(n_res);
-  //tag_particles(tagged_par_idx2, x_left, tagged_region_width, p_arr, dm);
 
-  ////std::cout << tagged_par_idx2.size() << std::endl;
-  //int np = p_arr.size();
-  //int tot_np;
-  //MPI_Reduce(&np, &tot_np, 1, MPI_INT, MPI_SUM, 0, dm.comm());
-  //int my_rank;
-  //MPI_Comm_rank(dm.comm(), &my_rank);
-  //if (my_rank == 0)
-  //  std::cout << "tot np: " << tot_np << ", band loc: " << x_band << std::endl;
+}
+
+template <typename TNode, typename TDomain, typename TRan>
+void uniformize_gas(double x_left, double w, double rho_0,
+                    std::vector<TNode>& p_arr,
+                    CellListNode_2<TNode>& cl,
+                    const TDomain& dm, TRan& myran) {
+  double ly = dm.l().y;
+  std::vector<int> tagged_par_idx;
+  int n_res = w * ly * rho_0 * 4;
+  tagged_par_idx.reserve(n_res);
+  tag_remove_particles(tagged_par_idx, x_left, w, p_arr, dm, cl);
+  int my_np = tagged_par_idx.size();
+  int new_np = get_new_par_num(tagged_par_idx, myran, dm);
+
+  for (int i = 0; i < new_np; i++) {
+    Vec_2<double> pos, ori;
+    get_new_pos_ori(pos, ori, myran, dm, x_left, w);
+    int j;
+    if (tagged_par_idx.size() > 0) {
+      j = tagged_par_idx.back();
+      tagged_par_idx.pop_back();
+      p_arr[j].pos = pos;
+      p_arr[j].ori = ori;
+    } else {
+      j = p_arr.size();
+      p_arr.emplace_back(pos, ori);
+    }
+    cl.add_node(p_arr[j]);
+  }
+
+  if (tagged_par_idx.size() > 0) {
+    std::sort(tagged_par_idx.begin(), tagged_par_idx.end(), std::greater<int>());
+    cl.make_compact(p_arr, tagged_par_idx);
+  }
 
 }
 

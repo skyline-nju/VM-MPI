@@ -159,7 +159,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
         x_band = get_band_location(p_arr, dm);
         x_left = get_left_edge(x_band, width, dm);
       }
-      uniformize_gas(p_arr, cl, dm, myran, x_left, width, rho_0);
+      uniformize_gas(x_left, width, rho_0, p_arr, cl, dm, myran);
       out(i, p_arr);
     }
   } else {
@@ -180,7 +180,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
         x_band = get_band_location(p_arr, dm);
         x_left = get_left_edge(x_band, width, dm);
       }
-      uniformize_gas(p_arr, cl, dm, myran, x_left, width, rho_0);
+      uniformize_gas(x_left, width, rho_0, p_arr, cl, dm, myran);
       out(i_step, p_arr);
       i_step++;
       if (i_step > n_step && i_step % 100 == 1) {
