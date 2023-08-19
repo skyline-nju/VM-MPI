@@ -276,7 +276,7 @@ template<typename TPar>
 void SnapExporter::dump(int i_step, const std::vector<TPar>& p_arr) {
   if (need_export(i_step)) {
     char filename[100];
-    snprintf(filename, 100, "%s_%08d.bin", file_prefix_.c_str(), t_beg_ + i_step);
+    snprintf(filename, 255, "%s_%08d.bin", file_prefix_.c_str(), t_beg_ + i_step);
     count_++;
     int my_n = p_arr.size();
 #ifdef USE_MPI

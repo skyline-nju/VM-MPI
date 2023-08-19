@@ -178,10 +178,11 @@ void equili_tagged_par(std::vector<int>& par_idx, double xmin, double width, TRa
   int* np_arr = new int[proc_size] {};
   if (my_rank == 0) {
     int n_mean = tot_np / proc_size;
-    for (int i = 0; i < proc_size - 1; i++) {
+    for (int i = 0; i < proc_size; i++) {
       np_arr[i] = n_mean;
     }
-    np_arr[proc_size - 1] = tot_np - n_mean * (proc_size - 1);
+    int j = int(myran.doub() * proc_size);
+    np_arr[j] = tot_np - n_mean * (proc_size - 1);
   }
 
   int new_np;

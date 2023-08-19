@@ -90,7 +90,7 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   snprintf(snapfolder, 255, "%ssnap\\", folder);
 
 #else
-  snprintf(folder, 255, "/scratch03.local/yduan/wide_band/%g_%g/", gl_l.x, gl_l.y);
+  snprintf(folder, 255, "/scratch03.local/yduan/wide_band/%g_%g_homo/", gl_l.x, gl_l.y);
   snprintf(snapfolder, 255, "%ssnap/", folder);
 #endif
   if (my_rank == 0) {
