@@ -315,6 +315,16 @@ void uniformize_gas(double x_left, double w, double rho_0,
     cl.make_compact(p_arr, tagged_par_idx);
   }
 
+  // test whether the particle number is equal to expected new_np 
+  
+  //std::vector<int> tagged_par_idx2;
+  //tagged_par_idx2.reserve(n_res);
+  //tag_particles(tagged_par_idx2, x_left, w, p_arr, dm);
+  //if (tagged_par_idx2.size() != new_np) {
+  //  std::cout << "Error! Wrong number of tagged particles" << std::endl;
+  //  exit(1);
+  //}
+
 }
 
 
