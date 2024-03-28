@@ -121,7 +121,8 @@ void move_forward(Par& p, double v0, double dtheta) {
 template <class Par, class TDomain>
 void move_forward(Par& p, double v0, double dtheta, const TDomain& domain) {
   move_forward(p, v0, dtheta);
-  domain.tangle(p.pos);
+  //domain.tangle(p.pos);
+  domain.tangle(p);
 }
 
 

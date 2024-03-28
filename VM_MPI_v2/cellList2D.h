@@ -203,7 +203,14 @@ public:
   void recreate(std::vector<TNode> &p_arr, bool thick_shell=false);
   void update(TNode& p, int ic_old, int ic_new);
 
-  void add_node(TNode &p) { p.append_at_front(&head_[get_ic(p)]); }
+  void add_node(TNode &p) {
+    int ic = get_ic(p);
+    if (ic < 0 || ic >= n_cells_) {
+      std::cout << p.pos << std::endl;
+    }
+    p.append_at_front(&head_[ic]);
+    //p.append_at_front(&head_[get_ic(p)]);
+  }
 
   void add_node_thick_shell(TNode& p) { p.append_at_front(&head_[get_ic_thick_shell(p)]); }
 

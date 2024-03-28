@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="cellList2D.h" />
     <ClInclude Include="communicator2D.h" />
+    <ClInclude Include="comn.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="disorder2D.h" />
     <ClInclude Include="domain2D.h" />
@@ -29,6 +30,7 @@
     <ClInclude Include="run2D.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="comn.cpp" />
     <ClCompile Include="exporter2D.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="run2D.cpp" />
@@ -105,15 +107,15 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(COMMON_DIR);$(MSMPI_INC);$(MSMPI_INC)x64;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSMPI_INC);$(MSMPI_INC)x64;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(COMMON_DIR);$(MSMPI_LIB64)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>msmpi.lib;comn.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(MSMPI_LIB64)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>msmpi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

@@ -85,7 +85,6 @@ void integrate(std::vector<TNode>& p_arr, CellListNode_2<TNode>& cl, UniFunc f_m
     f_move(*it);
   }
   cl.recreate(p_arr, thick_shell);
-
   comm.comm_after_integration(p_arr, cl, thick_shell);
 
 }

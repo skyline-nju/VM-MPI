@@ -21,7 +21,7 @@
 //#define USE_NC
 
 // boundary conditions:
-//#define REF_WALL_Y  // reflecting walls at y=0 and y=Ly
+#define REF_WALL_Y  // reflecting walls at y=0 and y=Ly
 
 //#define REF_WALL_XY // relecting walls at both x and y directions
 

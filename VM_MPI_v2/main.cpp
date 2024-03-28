@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &tot_proc);
 
-  int arg_size = 8;
+  int arg_size = 4;
   if ((argc - 1) % arg_size != 0) {
     std::cout << "Error, argc = " << argc << std::endl;
     exit(1);
@@ -41,21 +41,21 @@ int main(int argc, char* argv[]) {
   MPI_Comm_create(MPI_COMM_WORLD, root_group, &root_comm);
 
   int idx_beg = my_group * arg_size;
-  double Lx = atof(argv[1 + idx_beg]);
-  double Ly = atof(argv[2 + idx_beg]);
-  double eta = atof(argv[3 + idx_beg]);
-  double rho0 = atof(argv[4 + idx_beg]);
-  double v0 = atof(argv[5 + idx_beg]);
-  int n_step = atof(argv[6 + idx_beg]);
-  unsigned long long seed = atoi(argv[7 + idx_beg]);
-  std::string ini_mode = argv[8 + idx_beg];
+  double Lx = 320;
+  double Ly = 160;
+  double eta = atof(argv[1 + idx_beg]);
+  double rho0 = atof(argv[2 + idx_beg]);
+  double v0 = 0.5;
+  int n_step = 50000000;
+  unsigned long long seed = atoi(argv[3 + idx_beg]);
+  std::string ini_mode = argv[4 + idx_beg];
 
   Vec_2<double> gl_l(Lx, Ly);
   double eps = 0;
   int seed2 = 0;
   int snap_dt = 10000;
   int field_dt = 10000;
-  int field_dx = 8;
+  int field_dx = 2;
 
   int gl_par_num = int(gl_l.x * gl_l.y * rho0);
 

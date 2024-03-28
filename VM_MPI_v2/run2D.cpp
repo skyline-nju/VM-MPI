@@ -13,7 +13,7 @@ void set_particle_num(int gl_par_num, int& my_par_num, int& my_par_num_max, MPI_
   }
   my_par_num = my_par_num;
   if (tot_proc > 1) {
-    my_par_num_max = 10 * my_par_num;
+    my_par_num_max = 15 * my_par_num;
   } else {
     my_par_num_max = 1.1 * my_par_num;
   }
@@ -33,17 +33,18 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   int my_rank, tot_proc;
   MPI_Comm_rank(group_comm, &my_rank);
   MPI_Comm_size(group_comm, &tot_proc);
-  Ranq1 myran(seed + my_rank);
+  Ranq1 myran(seed * 10 + my_rank);
   std::vector<node_t> p_arr;
   const double r_cut = 1.0;
   double rho_0 = gl_par_num / (gl_l.x * gl_l.y);
   double eta2PI = eta * 2.0 * PI;
 
-  Vec_2<int> proc_size = decompose_domain(gl_l, group_comm);
+  //Vec_2<int> proc_size = decompose_domain(gl_l, group_comm);
+  Vec_2<int> proc_size = Vec_2<int>(1, 1);
   PeriodicDomain_2 dm(gl_l, proc_size, group_comm);
   Grid_2 grid(dm, r_cut);
   CellListNode_2<node_t> cl(dm, grid);
-  Communicator_2 comm(dm, grid, rho_0, 40.);
+  Communicator_2 comm(dm, grid, rho_0, 80.);
 
   // initialize aligning force
   auto f1 = [](node_t* p1, node_t* p2) {
@@ -65,64 +66,48 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
   };
 #endif
 
-  // initialize integrator
-#ifdef DISORDER_ON
-  // initialize quenched disorder
-#ifdef RANDOM_TORQUE
-  RandTorque_2 disorder(eps, myran, grid, group_comm);
-#elif defined RANDOM_FIELD
-  RandField_2 disorder(eps, myran, grid, group_comm);
-#elif defined RANDOM_POTENTIAL
-  RandPotential_2 disorder(eta, eps, myran, grid, group_comm);
-#endif
-  auto single_move = [eta2PI, v0, &myran, &dm, &disorder, eps](node_t& p) {
-#ifndef RANDOM_POTENTIAL
-    double noise = (myran.doub() - 0.5) * eta2PI;
-    if (eps > 0.) {
-#ifdef RANDOM_TORQUE
-      noise += disorder.get_torque(p);
-#else
-      disorder.apply_field(p);
-#endif
-    }
-#else
-    double noise = disorder.get_potential(p) * (myran.doub() - 0.5);
-#endif
-    move_forward(p, v0, noise, dm);
-  };
-#else
-  auto single_move = [eta2PI, v0, &myran, &dm, eps](node_t& p) {
-    double noise = (myran.doub() - 0.5) * eta2PI;
-    move_forward(p, v0, noise, dm);
-  };
-#endif
-
   // initialize particles
   int t_beg;
   ini_particles(gl_par_num, p_arr, ini_mode, myran, seed2, cl, dm, t_beg);
 
+  // initialize integrator
+  Ranq1 myran2(seed + t_beg + my_rank);
+  auto single_move = [eta2PI, v0, &myran2, &dm, eps](node_t& p) {
+    double noise = (myran2.doub() - 0.5) * eta2PI;
+    move_forward(p, v0, noise, dm);
+  };
+  
   // output setting
+  char folder[255];
+  char snapfolder[255];
+#ifndef _MSC_VER
+  snprintf(folder, 255, "/scratch03.local/yduan/polar_LG_W/%g_%g/", gl_l.x, gl_l.y);
+  snprintf(snapfolder, 255, "%ssnap/", folder);
+#else
+  snprintf(folder, 255, "data\\%g_%g\\", gl_l.x, gl_l.y);
+  snprintf(snapfolder, 255, "%ssnap\\", folder);
+#endif
   if (my_rank == 0) {
-    mkdir("data");
-    mkdir("data/snap");
+    mkdir(folder);
+    mkdir(snapfolder);
   }
   MPI_Barrier(group_comm);
-  char logfile[100];
-  char phifile[100];
-  char snapfile[100];
-  char fieldfile[100];
-  char basename[100];
+  char logfile[255];
+  char phifile[255];
+  char snapfile[255];
+  char fieldfile[255];
+  char basename[255];
 
   if (gl_l.x == gl_l.y) {
-    snprintf(basename, 100, "%g_%.3f_%.3f_%.1f_%llu", gl_l.x, eta, rho_0, v0, seed);
+    snprintf(basename, 255, "%g_%.3f_%.3f_%.1f_%llu", gl_l.x, eta, rho_0, v0, seed);
   } else {
-    snprintf(basename, 100, "%g_%g_%.3f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho_0, v0, seed);
+    snprintf(basename, 255, "%g_%g_%.3f_%.3f_%.1f_%llu", gl_l.x, gl_l.y, eta, rho_0, v0, seed);
   }
 
-  snprintf(logfile, 100, "data/%s_%d.log", basename, t_beg);
-  snprintf(phifile, 100, "data/%s_%d.dat", basename, t_beg);
-  snprintf(snapfile, 100, "data/snap/s%s", basename);
-  snprintf(fieldfile, 100, "data/%s_%d_%d_%d.bin", basename, field_dx, field_dt, t_beg);
+  snprintf(logfile, 255, "%s%s_%d.log", folder, basename, t_beg);
+  snprintf(phifile, 255, "%s%s_%d.dat", folder, basename, t_beg);
+  snprintf(snapfile, 255, "%ss%s", snapfolder, basename);
+  snprintf(fieldfile, 255, "%s%s_%d_%d_%d.bin", folder, basename, field_dx, field_dt, t_beg);
 
   exporter::LogExporter log(logfile, 0, n_step * 2, 10000, gl_par_num, group_comm);
   exporter::OrderParaExporter_2 order_ex(phifile, 0, n_step * 2, 100, gl_l, group_comm);
@@ -158,7 +143,9 @@ void run(int gl_par_num, const Vec_2<double>& gl_l,
     for (int i = 1; i <= n_step; i++) {
       cal_force(p_arr, cl, comm, for_all_pair_force);
       integrate(p_arr, cl, single_move, comm, thick_shell);
+
       out(i, p_arr);
+
     }
   } else {
     int i_step = 1;
